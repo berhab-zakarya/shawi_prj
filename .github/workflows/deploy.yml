@@ -3,7 +3,7 @@ name: 🚀 Deploy to Hostinger
 on:
   push:
     branches:
-      - master  # أو الفرع الذي تعمل عليه
+      - master
 
 jobs:
   deploy:
@@ -21,4 +21,10 @@ jobs:
           ssh-keyscan -H 31.97.182.92 >> ~/.ssh/known_hosts
 
       - name: Deploy to Hostinger
-        run: ssh root@31.97.182.92 'cd /opt/elshawi_project && git pull && docker-compose -f docker-compose.prod.yml down && docker-compose -f docker-compose.prod.yml up -d'
+        run: |
+          ssh -o StrictHostKeyChecking=no root@31.97.182.92 '
+            cd /opt/elshawi_project &&
+            git pull &&
+            docker-compose -f docker-compose.prod.yml down &&
+            docker-compose -f docker-compose.prod.yml up -d
+          '
