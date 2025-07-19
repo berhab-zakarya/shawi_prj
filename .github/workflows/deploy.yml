@@ -1,0 +1,25 @@
+name: 🚀 Deploy to Hostinger
+
+on:
+  push:
+    branches:
+      - main  # أو الفرع الذي تعمل عليه
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Add SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 31.97.182.92 >> ~/.ssh/known_hosts
+
+      - name: Deploy to Hostinger
+        run: |
+          ssh root@31.97.182.92 'cd /opt/elshawi_project && git pull && docker-compose -f docker-compose.prod.yml down && docker-compose -f docker-compose.prod.yml up -d'
