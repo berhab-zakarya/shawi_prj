@@ -133,6 +133,7 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+      
 
   weaviate:
     image: semitechnologies/weaviate:latest
