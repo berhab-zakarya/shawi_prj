@@ -2,7 +2,7 @@
 *.pyc
 __pycache__/
 *.log
-
+*.sh
 # Django
 *.sqlite3
 media/
@@ -25,3 +25,4 @@ Thumbs.db
 # !.env
 # !.env.production
 logs/
+copied_files/
