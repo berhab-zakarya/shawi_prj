@@ -23,6 +23,7 @@ jobs:
       - name: Deploy to Hostinger
         run: |
           ssh -o StrictHostKeyChecking=no root@31.97.182.92 '
+            set -e
             cd /opt/elshawi_project/shawi_prj &&
             git pull &&
             docker-compose -f docker-compose.prod.yml down &&
