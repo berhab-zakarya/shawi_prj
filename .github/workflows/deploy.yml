@@ -3,7 +3,7 @@ name: 🚀 Deploy to Hostinger
 on:
   push:
     branches:
-      - main  # أو الفرع الذي تعمل عليه
+      - master  # أو الفرع الذي تعمل عليه
 
 jobs:
   deploy:
