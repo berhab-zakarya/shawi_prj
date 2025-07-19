@@ -24,8 +24,17 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no root@31.97.182.92 '
             set -e
-            cd /opt/elshawi_project/shawi_prj &&
-            git pull &&
-            docker-compose -f docker-compose.prod.yml down &&
+            REPO_DIR="/opt/elshawi_platform/shawi_prj"
+            if [ ! -d "$REPO_DIR" ]; then
+              mkdir -p /opt/elshawi_platform
+              cd /opt/elshawi_platform
+              git clone https://github.com/berhab-zakarya/shawi_prj.git shawi_prj
+            else
+              cd "$REPO_DIR"
+              git pull
+            fi
+
+            cd "$REPO_DIR"
+            docker-compose -f docker-compose.prod.yml down
             docker-compose -f docker-compose.prod.yml up -d
           '
