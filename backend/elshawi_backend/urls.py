@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from django.http import JsonResponse
+
 api_path = 'api/v1/'
 urlpatterns = [
     path(f'{api_path}', include('accounts.urls')),
@@ -32,3 +34,7 @@ urlpatterns = [
 from django.conf import settings
 from django.conf.urls.static import static
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+urlpatterns += [
+    path("health/", lambda request: JsonResponse({"status": "ok"})),
+]
+
