@@ -1,0 +1,161 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="{% block html_lang %}en{% endblock %}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Invoice{% endblock %}</title>
+    <style>
+        {% block css %}
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+        </style>
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="invoice-header">
+            {% block header_content %}
+            <div>
+                {% if company.logo %}
+                    <img src="{{ company.logo }}" class="logo" alt="Company Logo">
+                {% endif %}
+                <h1 class="invoice-title">{% block invoice_title %}Invoice{% endblock %}</h1>
+                <div class="invoice-number">{% block invoice_number_label %}Invoice Number{% endblock %}: {{ invoice.invoice_number }}</div>
+            </div>
+            <div>
+                <div class="status-badge status-{{ invoice.status|lower }}{% if invoice.is_overdue %} status-overdue{% endif %}">
+                    {{ invoice.get_status_display }}
+                </div>
+            </div>
+            {% endblock %}
+        </div>
+
+        <div class="invoice-details">
+            <div class="company-info">
+                <h3>{% block company_info_label %}From{% endblock %}</h3>
+                <div class="info-item">{{ company.name }}</div>
+                <div class="info-item">{{ company.address }}</div>
+                <div class="info-item">{{ company.phone }}</div>
+                <div class="info-item">{{ company.email }}</div>
+                {% if company.website %}
+                    <div class="info-item">{{ company.website }}</div>
+                {% endif %}
+            </div>
+            <div class="client-info">
+                {% block client_info %}
+                <h3>{% block client_info_label %}Bill To{% endblock %}</h3>
+                <div class="info-item">{{ invoice.user.get_full_name|default:invoice.user.username }}</div>
+                <div class="info-item">{{ invoice.user.email }}</div>
+                {% endblock %}
+            </div>
+        </div>
+
+        <div class="invoice-meta">
+            <div class="meta-row">
+                <span class="meta-label">{% block issue_date_label %}Issue Date{% endblock %}</span>
+                <span class="meta-value">{{ invoice.issue_date }}</span>
+            </div>
+            <div class="meta-row">
+                <span class="meta-label">{% block due_date_label %}Due Date{% endblock %}</span>
+                <span class="meta-value">{{ invoice.due_date }}</span>
+            </div>
+        </div>
+
+        <div class="invoice-items">
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th>{% block description_label %}Description{% endblock %}</th>
+                        <th class="text-center">{% block quantity_label %}Quantity{% endblock %}</th>
+                        <th class="text-right">{% block unit_price_label %}Unit Price{% endblock %}</th>
+                        <th class="text-right">{% block total_label %}Total{% endblock %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% block items_table %}
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.description }}</td>
+                        <td class="text-center">{{ item.quantity }}</td>
+                        <td class="text-right">{{ item.unit_price }}</td>
+                        <td class="text-right">{{ item.total_price }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% endblock %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="invoice-summary">
+            <table class="summary-table">
+                <tbody>
+                    {% block summary %}
+                    <tr>
+                        <td>{% block subtotal_label %}Subtotal{% endblock %}</td>
+                        <td class="text-right">{{ invoice.subtotal }}</td>
+                    </tr>
+                    <tr>
+                        <td>{% block tax_label %}Tax ({{ invoice.tax_rate }}%){% endblock %}</td>
+                        <td class="text-right">{{ invoice.tax_amount }}</td>
+                    </tr>
+                    <tr>
+                        <td>{% block discount_label %}Discount{% endblock %}</td>
+                        <td class="text-right">{{ invoice.discount_amount }}</td>
+                    </tr>
+                    <tr class="total-row">
+                        <td>{% block total_amount_label %}Total Amount{% endblock %}</td>
+                        <td class="text-right">{{ invoice.total_amount }}</td>
+                    </tr>
+                    {% endblock %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="invoice-footer">
+            {% block footer %}
+            <p>{% block notes_label %}Notes{% endblock %}: Thank you for your business.</p>
+            <p>{% block terms_label %}Terms & Conditions{% endblock %}: Payment is due within 30 days.</p>
+            {% endblock %}
+        </div>
+    </div>
+</body>
+</html>

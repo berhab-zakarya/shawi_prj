@@ -1,0 +1,125 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script>{% extends 'invoices/pdf/invoice_base.html' %}
+
+{% block html_lang %}ar{% endblock %}
+
+{% block title %}فاتورة {{ invoice.invoice_number }}{% endblock %}
+
+{% block css %}
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+
+body {
+    font-family: 'Noto Sans Arabic', sans-serif;
+    direction: rtl;
+    text-align: right;
+}
+{% endblock %}
+
+{% block header_content %}
+<div>
+    {% if company.logo %}
+        <img src="{{ company.logo }}" class="logo" alt="شعار الشركة">
+    {% endif %}
+    <h1 class="invoice-title">فاتورة</h1>
+    <div class="invoice-number">رقم الفاتورة: {{ invoice.invoice_number }}</div>
+</div>
+<div>
+    <div class="status-badge status-{{ invoice.status|lower }}{% if invoice.is_overdue %} status-overdue{% endif %}">
+        {{ invoice.get_status_display }}
+    </div>
+</div>
+{% endblock %}
+
+{% block company_info_label %}من{% endblock %}
+{% block client_info_label %}فاتورة إلى{% endblock %}
+{% block issue_date_label %}تاريخ الإصدار{% endblock %}
+{% block due_date_label %}تاريخ الاستحقاق{% endblock %}
+{% block description_label %}الوصف{% endblock %}
+{% block quantity_label %}الكمية{% endblock %}
+{% block unit_price_label %}سعر الوحدة{% endblock %}
+{% block total_label %}الإجمالي{% endblock %}
+{% block subtotal_label %}المجموع الفرعي{% endblock %}
+{% block tax_label %}الضريبة ({{ invoice.tax_rate }}%){% endblock %}
+{% block discount_label %}الخصم{% endblock %}
+{% block total_amount_label %}المبلغ الإجمالي{% endblock %}
+{% block notes_label %}ملاحظات{% endblock %}
+{% block terms_label %}الشروط والأحكام{% endblock %}
+
+{% block client_info %}
+<h3>فاتورة إلى</h3>
+<div class="info-item">{{ invoice.user.get_full_name|default:invoice.user.username }}</div>
+<div class="info-item">{{ invoice.user.email }}</div>
+{% endblock %}
+
+{% block items_table %}
+{% for item in items %}
+<tr>
+    <td>{{ item.description }}</td>
+    <td class="text-center">{{ item.quantity }}</td>
+    <td class="text-right">{{ item.unit_price }}</td>
+    <td class="text-right">{{ item.total_price }}</td>
+</tr>
+{% endfor %}
+{% endblock %}
+
+{% block summary %}
+<tr>
+    <td>المجموع الفرعي</td>
+    <td class="text-right">{{ invoice.subtotal }}</td>
+</tr>
+<tr>
+    <td>الضريبة ({{ invoice.tax_rate }}%)</td>
+    <td class="text-right">{{ invoice.tax_amount }}</td>
+</tr>
+<tr>
+    <td>الخصم</td>
+    <td class="text-right">{{ invoice.discount_amount }}</td>
+</tr>
+<tr class="total-row">
+    <td>المبلغ الإجمالي</td>
+    <td class="text-right">{{ invoice.total_amount }}</td>
+</tr>
+{% endblock %}
+
+{% block footer %}
+<p>ملاحظات: شكرًا لتعاملكم معنا.</p>
+<p>الشروط والأحكام: الدفع مستحق خلال 30 يومًا.</p>
+{% endblock %}

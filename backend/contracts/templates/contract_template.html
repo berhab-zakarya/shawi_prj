@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>عقد {{ contract_type }}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Noto Sans Arabic', Arial, sans-serif;
+            direction: rtl;
+            text-align: right;
+            line-height: 1.8;
+            color: #2c3e50;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .contract-container {
+            max-width: 210mm;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .contract-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .contract-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+        }
+    </style>
+  </head>
+  <body>
+    <div class="contract-container">
+      {{ gpt_html|safe }}
+
+      <div class="contract-header">
+        <div class="ornament">📋</div>
+        <h1 class="contract-title">عقد {{ contract_type|default:'عام' }}</h1>
+        <p class="contract-subtitle">وثيقة قانونية معتمدة</p>
+      </div>
+
+      <div class="contract-body">
+        <div class="contract-info">
+          {% if not gpt_html %}
+            {% for key, value in data_items %}
+              <div class="info-row">
+                <div class="info-label">{{ key|title }}</div>
+                <div class="info-value">{{ value }}</div>
+              </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+
+        <div class="creation-date">📅 تاريخ الإنشاء: {{ created_at }}</div>
+
+        {% if signatures %}
+          <h2>Signatures</h2>
+          {% for signature in signatures %}
+            <div class="signature-block">
+              <p>Signed by: {{ signature.user.fullname }}</p>
+              <p class="signature-id">Signature ID: {{ signature.id }}</p>
+              <p>Signed at: {{ signature.signed_at }}</p>
+              <p>IP Address: {{ signature.ip_address }}</p>
+              <div class="barcode">{{ signature.barcode_svg|safe }}</div>
+            </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+
+      <div class="contract-footer">
+        هذا العقد تم إنشاؤه وتوقيعه إلكترونياً وله قوة قانونية معتمدة<br />
+        جميع الحقوق محفوظة © 2025
+      </div>
+    </div>
+
+    <div class="print-timestamp">
+      طُبع في: <span id="printTime"></span>
+    </div>
+
+    <script>
+        // Set print timestamp
+        document.getElementById('printTime').textContent = new Date().toLocaleString('ar-SA');
+        
+        // Add print functionality
+        window.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+                window.print();
+            }
+        });
+        
+        // Add hover effects for better interactivity 
+        document.querySelectorAll('.info-row, .signature-card').forEach(element => {
+            element.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-2px)';
+            });
+            
+            element.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+            });
+        });
+    </script>
+  </body>
+</html>

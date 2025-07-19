@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { text-align: center; }
+        .signature { margin-top: 50px; }
+        .signature-line { border-top: 1px solid #000; width: 200px; }
+        .section { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>{{ contract.title }}</h1>
+    <div class="section">
+        <h2>Parties</h2>
+        <p><strong>Party A:</strong> {{ contract.party_a.username }}</p>
+        <p><strong>Party B:</strong> {{ contract.party_b.username }}</p>
+    </div>
+    <div class="section">
+        <h2>Content</h2>
+        <p>{{ contract.content|linebreaksbr }}</p>
+    </div>
+    <div class="section signature">
+        <h2>Signatures</h2>
+        {% if contract.party_a_signature %}
+        <p><strong>Party A Signature:</strong> {{ contract.party_a_signature }}</p>
+        <p>Signed at: {{ contract.party_a_signed_at }}</p>
+        {% else %}
+        <p><strong>Party A Signature:</strong> ____________________</p>
+        {% endif %}
+        {% if contract.party_b_signature %}
+        <p><strong>Party B Signature:</strong> {{ contract.party_b_signature }}</p>
+        <p>Signed at: {{ contract.party_b_signed_at }}</p>
+        {% else %}
+        <p><strong>Party B Signature:</strong> ____________________</p>
+        {% endif %}
+    </div>
+</body>
+</html>

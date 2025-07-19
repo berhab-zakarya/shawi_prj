@@ -1,0 +1,12 @@
+# 🚀 Production Stage
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
+
+COPY . .
+
+# Start server with gunicorn for production
+CMD ["gunicorn", "elshawi_backend.wsgi:application", "--bind", "0.0.0.0:8000"]

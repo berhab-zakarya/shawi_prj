@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اتفاقية عدم الإفصاح</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Times New Roman', serif;
+            background: white;
+            padding: 40px;
+            direction: rtl;
+            text-align: right;
+            color: #000;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 210mm;
+            margin: 0 auto;
+            background: white;
+            border: 2px solid #000;
+            padding: 30px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #000;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: bold;
+            color: #000;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        
+        .header .english {
+            font-size: 18px;
+            font-weight: normal;
+            color: #333;
+            font-style: italic;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+        }
+        
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #000;
+            margin-bottom: 10px;
+            text-decoration: underline;
+            text-align: right;
+        }
+        
+        .section-title .english {
+            font-style: italic;
+            font-weight: normal;
+            color: #666;
+        }
+        
+        .section-content {
+            color: #000;
+            font-size: 12px;
+            text-align: justify;
+            margin-right: 20px;
+        }
+        
+        .section-content p {
+            margin-bottom: 10px;
+        }
+        
+        .form-field {
+            display: inline-block;
+            border-bottom: 1px solid #000;
+            min-width: 120px;
+            padding: 2px 5px;
+            margin: 0 2px;
+            font-weight: bold;
+        }
+        
+        .signature-section {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #000;
+            page-break-inside: avoid;
+        }
+        
+        .signature-line {
+            border-bottom: 1px solid #000;
+            height: 40px;
+            margin: 15px 0;
+            position: relative;
+        }
+        
+        .signature-label {
+            font-size: 11px;
+            color: #000;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .two-column {
+            display: flex;
+            gap: 40px;
+            margin-top: 20px;
+        }
+        
+        .column {
+            flex: 1;
+        }
+        
+        .column h4 {
+            font-size: 13px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>اتفاقية عدم الإفصاح</h1>
+            <h2 class="english">NON-DISCLOSURE AGREEMENT</h2>
+        </div>
+        
+        <div class="section">
+            <h3 class="section-title">الأطراف - <span class="english">PARTIES</span></h3>
+            <div class="section-content">
+                <p>
+                    تم إبرام اتفاقية عدم الإفصاح هذه (المشار إليها فيما بعد باسم "الاتفاقية") في 
+                    <span class="form-field">{{ data.effective_date }}</span> 
+                    ("تاريخ السريان")، بين وبواسطة 
+                    <span class="form-field">{{ data.disclosing_party }}</span> 
+                    بعنوان 
+                    <span class="form-field">{{ data.disclosing_party_address }}</span>
+                    (المشار إليها فيما بعد باسم "الطرف المفصح") و 
+                    <span class="form-field">{{ data.receiving_party }}</span>
+                    بعنوان 
+                    <span class="form-field">{{ data.receiving_party_address }}</span>
+                    (المشار إليهما مجتمعين باسم "الأطراف").
+                </p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title">الغرض - <span class="english">PURPOSE</span></h3>
+            <div class="section-content">
+                <p>
+                    الغرض من هذه الاتفاقية هو 
+                    <span class="form-field">{{ data.purpose }}</span>.
+                </p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title">المعلومات السرية - <span class="english">CONFIDENTIAL INFORMATION</span></h3>
+            <div class="section-content">
+                <p>
+                    يوافق الطرف المستلم على عدم الإفصاح عن أو نسخ أو استنساخ أو تعديل أي معلومات سرية متعلقة بالطرف المفصح ويوافق على عدم استخدام أي من هذه المعلومات دون الحصول على موافقة مسبقة.
+                </p>
+                <p>
+                    تشير "المعلومات السرية" إلى 
+                    <span class="form-field">{{ data.confidential_info }}</span>، بما في ذلك على سبيل المثال لا الحصر، أي بيانات و/أو معلومات متعلقة بالطرف المفصح، بأي شكل، شفهياً أو كتابياً.
+                </p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title">مدة الاتفاقية - <span class="english">TERM</span></h3>
+            <div class="section-content">
+                <p>
+                    تظل هذه الاتفاقية سارية المفعول لمدة 
+                    <span class="form-field">{{ data.term }}</span> من تاريخ السريان.
+                </p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title">إرجاع المعلومات السرية - <span class="english">RETURN OF CONFIDENTIAL INFORMATION</span></h3>
+            <div class="section-content">
+                <p>
+                    يوافق الطرف المستلم على إرجاع جميع المعلومات السرية إلى الطرف المفصح عند انتهاء هذه الاتفاقية.
+                </p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title">الملكية - <span class="english">OWNERSHIP</span></h3>
+            <div class="section-content">
+                <p>
+                    هذه الاتفاقية غير قابلة للتحويل ولا يجوز تحويلها إلا بموافقة كتابية مقدمة من كلا الطرفين.
+                </p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title">القانون الحاكم - <span class="english">GOVERNING LAW</span></h3>
+            <div class="section-content">
+                <p>
+                    تحكم هذه الاتفاقية وتفسر وفقاً لقوانين 
+                    <span class="form-field">{{ data.governing_law }}</span>.
+                </p>
+            </div>
+        </div>
+
+        <div class="section signature-section">
+            <h3 class="section-title">التوقيع والتاريخ - <span class="english">SIGNATURE AND DATE</span></h3>
+            <div class="section-content">
+                <p>
+                    يوافق الأطراف بموجب هذا على الشروط والأحكام المنصوص عليها في هذه الاتفاقية ويتم إثبات ذلك بتوقيعاتهم أدناه:
+                </p>
+                {{ signatures_block|safe }}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

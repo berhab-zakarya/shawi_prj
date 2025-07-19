@@ -1,0 +1,57 @@
+# Core Dependencies
+asgiref==3.8.1
+Django==4.2.23
+django-cors-headers==4.7.0
+djangorestframework==3.16.0
+djangorestframework-simplejwt==5.5.0
+gunicorn==23.0.0
+Pillow==11.2.1
+psycopg2-binary==2.9.10
+PyJWT==2.9.0
+sqlparse==0.5.3
+typing_extensions==4.14.0
+tzdata==2025.2
+
+# File Processing & AI
+PyPDF2==3.0.1
+python-docx==1.1.0
+python-magic==0.4.27
+langchain==0.2.1
+openai==1.30.5
+weaviate-client==4.5.1
+requests==2.32.3
+
+# Real-time & Async
+channels==4.1.0
+channels-redis==4.2.0
+celery==5.4.0
+redis==5.0.3
+daphne==4.1.2
+# Email & Notifications
+# django-templated-email==0.7.1
+# html2text==2024.6.21
+
+# API Documentation
+# drf-spectacular==0.27.2
+
+# Translations
+# django-modeltranslation==0.20.1
+
+# Utilities
+# python-dotenv==1.0.1
+django-filter==25.1
+PyPDF2
+python-docx
+weasyprint
+python-barcode
+transformers==4.38.2
+numpy
+scikit-learn
+gevent
+django-ckeditor-5==0.2.13
+django-taggit==2.1.0
+reportlab
+qrcode
+psycopg2-binary
+# django-extensions==3.3.1
+# django-debug-toolbar==4.4.0

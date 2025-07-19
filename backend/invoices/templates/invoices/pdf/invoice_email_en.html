@@ -1,0 +1,105 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice {{ invoice.invoice_number }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .content {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #2563eb;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ company_name }} Invoice</h1>
+        <p>Invoice Number: {{ invoice.invoice_number }}</p>
+    </div>
+    <div class="content">
+        <p>Dear {{ user.get_full_name|default:user.username }},</p>
+        <p>Thank you for your business. Please find your invoice attached.</p>
+        <p>Invoice Details:</p>
+        <ul>
+            <li><strong>Issue Date:</strong> {{ invoice.issue_date }}</li>
+            <li><strong>Due Date:</strong> {{ invoice.due_date }}</li>
+            <li><strong>Total Amount:</strong> {{ invoice.total_amount }}</li>
+            <li><strong>Status:</strong> {{ invoice.get_status_display }}</li>
+        </ul>
+        <a href="{{ invoice.pdf_file.url }}" class="button">View Invoice PDF</a>
+        <p>If you have any questions, please contact us at {{ company.email }}.</p>
+    </div>
+    <div class="footer">
+        <p>{{ company_name }}</p>
+        <p>{{ company.address }} | {{ company.phone }}</p>
+        <p>{{ company.website }}</p>
+    </div>
+</body>
+</html>

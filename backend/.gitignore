@@ -1,0 +1,56 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.ENV/
+
+# Django specific
+*.sqlite3
+db.sqlite3
+*.log
+*.pot
+*.pyc
+*.pyo
+*.pyd
+*.migrations/
+local_settings.py
+media/
+staticfiles/
+static/
+
+# Environment variables
+.env
+.env.*
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Docker / system
+*.pid
+
+# Coverage / Testing
+htmlcov/
+.tox/
+.nox/
+.coverage
+coverage.xml
+.cache/
+.pytest_cache/
+
+# MyPy / Pylint
+.mypy_cache/
+.dmypy.json
+.pyre/

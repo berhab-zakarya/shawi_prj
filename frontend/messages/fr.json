@@ -1,0 +1,12 @@
+{
+  "welcome": "Bienvenue sur notre site",
+  "description": "Ceci est notre nouveau site qui vous offre les meilleurs services juridiques.",
+  "contact_us": "Contactez-nous",
+  "about_us": "À propos",
+  "services": "Services",
+  "privacy_policy": "Politique de confidentialité",
+  "terms_of_service": "Conditions d'utilisation",
+  "home": "Accueil",
+  "search_placeholder": "Rechercher des services juridiques...",
+  "submit": "Envoyer"
+}

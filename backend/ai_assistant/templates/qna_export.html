@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { text-align: center; }
+        .section { margin-bottom: 20px; }
+        .question { font-weight: bold; }
+        .answer { margin-left: 20px; }
+        .context { font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>Legal Q&A Export</h1>
+    <div class="section">
+        <p class="question">Question: {{ response.question }}</p>
+        <p class="answer">{{ response.answer|linebreaksbr }}</p>
+    </div>
+    {% if response.context_documents.all %}
+    <div class="section">
+        <h2>Context Documents</h2>
+        {% for doc in response.context_documents.all %}
+        <p class="context">{{ doc.title }} ({{ doc.document_type }})</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+    <div class="section">
+        <p>Asked by: {{ response.user.fullname }}</p>
+        <p>Date: {{ response.created_at }}</p>
+        {% if response.rating %}
+        <p>Rating: {{ response.rating }}/5</p>
+        {% endif %}
+    </div>
+</body>
+</html>

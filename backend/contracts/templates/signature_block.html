@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signature Block</title>
+    <style>
+        .signature-block {
+            margin-top: 20px;
+            padding: 15px;
+            border-top: 2px solid #2b6cb0;
+            font-family: Arial, sans-serif;
+        }
+        .signature-block h3 {
+            color: #2b6cb0;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .signature-info {
+            margin-bottom: 10px;
+        }
+        .signature-info p {
+            margin: 5px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        .qr-code {
+            margin-top: 10px;
+            max-width: 100px;
+        }
+        .signature-details {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="signature-block">
+        <h3>Signature</h3>
+        <div class="signature-details">
+            <div class="signature-info">
+                <p><strong>Signed by:</strong> {{ signature_info.user }}</p>
+                <p><strong>Date:</strong> {{ signature_info.timestamp|date:"Y-m-d H:i:s" }}</p>
+            </div>
+            {% if signature_info.qr_code %}
+                <img class="qr-code" src="data:image/png;base64,{{ signature_info.qr_code }}" alt="Signature QR Code">
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
