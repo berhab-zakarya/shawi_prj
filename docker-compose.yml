@@ -1,83 +1,141 @@
-version: "3.8"
+version: '3.8'
 
 services:
   redis:
     image: redis:6
     ports:
-      - "6380:6379"
+      - "6379:6379"
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    command: sh -c "python manage.py runserver 0.0.0.0:8000 >> /app/logs/backend.log 2>&1"
-    volumes:
-      - ./backend:/app
-      - ./logs:/app/logs
-    ports:
-      - "8000:8000"
-    environment:
-      - PYTHONUNBUFFERED=1
-    depends_on:
-      - redis
-      - db
-
-  daphne:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    command: sh -c "daphne -b 0.0.0.0 -p 8001 elshawi_backend.asgi:application >> /app/logs/daphne.log 2>&1"
-    volumes:
-      - ./backend:/app
-      - ./logs:/app/logs
-    ports:
-      - "8001:8001"
-    depends_on:
-      - redis
-
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    command: sh -c "celery -A elshawi_backend worker --loglevel=info -P gevent >> /app/logs/celery_worker.log 2>&1"
-    volumes:
-      - ./backend:/app
-      - ./logs:/app/logs
-    depends_on:
-      - redis
-
-  celery_beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    command: sh -c "celery -A elshawi_backend beat --loglevel=info >> /app/logs/celery_beat.log 2>&1"
-    volumes:
-      - ./backend:/app
-      - ./logs:/app/logs
-    depends_on:
-      - redis
-  weaviate:
-    image: semitechnologies/weaviate:latest
-    restart: always
-    ports:
-      - "8080:8080"
-    environment:
-      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
-      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
-      ENABLE_MODULES: ''
-      DEFAULT_VECTORIZER_MODULE: 'none'
-    volumes:
-      - weaviate_data:/var/lib/weaviate
   db:
     image: postgres:15
     environment:
       POSTGRES_DB: elshawi_db
       POSTGRES_USER: elshawi_user
       POSTGRES_PASSWORD: elshawi_pass
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DB_HOST=db
+      - DB_NAME=elshawi_db
+      - DB_USER=elshawi_user
+      - DB_PASS=elshawi_pass
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=/api
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/elshawi.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - frontend
+      - backend
+
 volumes:
-  weaviate_data:
   postgres_data:
+
+# version: "3.8"
+
+# services:
+#   redis:
+#     image: redis:6
+#     ports:
+#       - "6380:6379"
+
+#   backend:
+#     build:
+#       context: ./backend
+#       dockerfile: Dockerfile.dev
+#     command: sh -c "python manage.py runserver 0.0.0.0:8000 >> /app/logs/backend.log 2>&1"
+#     volumes:
+#       - ./backend:/app
+#       - ./logs:/app/logs
+#     ports:
+#       - "8000:8000"
+#     environment:
+#       - PYTHONUNBUFFERED=1
+#     depends_on:
+#       - redis
+#       - db
+
+#   daphne:
+#     build:
+#       context: ./backend
+#       dockerfile: Dockerfile.dev
+#     command: sh -c "daphne -b 0.0.0.0 -p 8001 elshawi_backend.asgi:application >> /app/logs/daphne.log 2>&1"
+#     volumes:
+#       - ./backend:/app
+#       - ./logs:/app/logs
+#     ports:
+#       - "8001:8001"
+#     depends_on:
+#       - redis
+
+#   celery_worker:
+#     build:
+#       context: ./backend
+#       dockerfile: Dockerfile.dev
+#     command: sh -c "celery -A elshawi_backend worker --loglevel=info -P gevent >> /app/logs/celery_worker.log 2>&1"
+#     volumes:
+#       - ./backend:/app
+#       - ./logs:/app/logs
+#     depends_on:
+#       - redis
+
+#   celery_beat:
+#     build:
+#       context: ./backend
+#       dockerfile: Dockerfile.dev
+#     command: sh -c "celery -A elshawi_backend beat --loglevel=info >> /app/logs/celery_beat.log 2>&1"
+#     volumes:
+#       - ./backend:/app
+#       - ./logs:/app/logs
+#     depends_on:
+#       - redis
+#   weaviate:
+#     image: semitechnologies/weaviate:latest
+#     restart: always
+#     ports:
+#       - "8080:8080"
+#     environment:
+#       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+#       PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+#       ENABLE_MODULES: ''
+#       DEFAULT_VECTORIZER_MODULE: 'none'
+#     volumes:
+#       - weaviate_data:/var/lib/weaviate
+#   db:
+#     image: postgres:15
+#     environment:
+#       POSTGRES_DB: elshawi_db
+#       POSTGRES_USER: elshawi_user
+#       POSTGRES_PASSWORD: elshawi_pass
+#     ports:
+#       - "5432:5432"
+#     volumes:
+#       - postgres_data:/var/lib/postgresql/data
+# volumes:
+#   weaviate_data:
+#   postgres_data:

@@ -2,7 +2,7 @@
 *.pyc
 __pycache__/
 *.log
-*.sh
+
 # Django
 *.sqlite3
 media/
@@ -26,3 +26,5 @@ Thumbs.db
 # !.env.production
 logs/
 copied_files/
+backend/.keep
+frontend/.keep
