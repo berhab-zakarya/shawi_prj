@@ -3,7 +3,7 @@ name: 🚀 Deploy Frontend Only (Next.js)
 on:
   push:
     paths:
-      - 'frontend/**'
+      -  ".github/workflows/deploy.yml"
     branches:
       - master
 
