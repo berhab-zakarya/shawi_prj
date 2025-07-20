@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - "nginx/**"
-      - ".github/workflows/nginx-reload.yml"
+      - ".github/workflows/deploy.yml"
 
 jobs:
   reload-nginx:
