@@ -58,38 +58,35 @@ jobs:
             # Build only if needed with maximum optimization
             echo "🏗️ Smart building with maximum cache..."
             
-            echo "🔨 Building with connection keepalive..."
+            echo "🔨 Building with optimized approach..."
             
-            # Build backend first (usually smaller/faster)
+            # Build backend first (usually faster)
             echo "🔨 Building backend..."
-            timeout 600 docker-compose -f docker-compose.prod.yml build backend || {
-              echo "❌ Backend build failed or timed out"
-              exit 1
-            }
+            docker-compose -f docker-compose.prod.yml build backend
 
-            # Build frontend with progress output to keep connection alive
+            # Build frontend with periodic output to keep connection alive
             if [ -d "frontend" ]; then
-              echo "🔨 Building frontend (this may take a while)..."
-              # Use nohup to prevent SSH disconnection from killing the build
-              nohup timeout 900 docker-compose -f docker-compose.prod.yml build --progress=plain frontend > /tmp/frontend_build.log 2>&1 &
-              BUILD_PID=$!
+              echo "🔨 Building frontend..."
+              # Use script to build with periodic keepalive
+              (
+                docker-compose -f docker-compose.prod.yml build frontend &
+                BUILD_PID=$!
+                
+                while kill -0 $BUILD_PID 2>/dev/null; do
+                  echo "⏳ Still building frontend... $(date)"
+                  sleep 30
+                done
+                
+                wait $BUILD_PID
+                echo $? > /tmp/build_exit_code
+              ) 2>&1
               
-              # Monitor the build and keep connection alive
-              while kill -0 $BUILD_PID 2>/dev/null; do
-                echo "⏳ Frontend build in progress... $(date)"
-                tail -5 /tmp/frontend_build.log 2>/dev/null || echo "Build log not ready yet"
-                sleep 30
-              done
-              
-              wait $BUILD_PID
-              BUILD_EXIT_CODE=$?
-              
-              if [ $BUILD_EXIT_CODE -ne 0 ]; then
+              # Check build result
+              BUILD_EXIT_CODE=$(cat /tmp/build_exit_code 2>/dev/null || echo "1")
+              if [ "$BUILD_EXIT_CODE" -ne 0 ]; then
                 echo "❌ Frontend build failed"
-                tail -50 /tmp/frontend_build.log
                 exit 1
               fi
-              
               echo "✅ Frontend build completed"
             fi
 
