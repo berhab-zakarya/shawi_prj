@@ -22,7 +22,7 @@ jobs:
 
       - name: Deploy to Hostinger
         run: |
-          ssh -o StrictHostKeyChecking=no root@31.97.182.92 << 'EOF'
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 root@31.97.182.92 << 'EOF'
             set -e
 
             echo "🚀 Starting ultra-fast deployment..."
@@ -58,29 +58,39 @@ jobs:
             # Build only if needed with maximum optimization
             echo "🏗️ Smart building with maximum cache..."
             
-            # Smart build strategy with fallback
-            echo "🔧 Checking Docker build capabilities..."
+            echo "🔨 Building with connection keepalive..."
             
-            # Check if buildx is available for BuildKit
-            if docker buildx version >/dev/null 2>&1; then
-              echo "✅ Using BuildKit with buildx"
-              export DOCKER_BUILDKIT=1
-              export COMPOSE_DOCKER_CLI_BUILD=1
-              BUILD_ARGS="--build-arg BUILDKIT_INLINE_CACHE=1"
-            else
-              echo "⚠️  BuildKit not available, using standard build with cache"
-              unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD
-              BUILD_ARGS=""
-            fi
-            
-            # Build backend with smart caching
+            # Build backend first (usually smaller/faster)
             echo "🔨 Building backend..."
-            docker-compose -f docker-compose.prod.yml build $BUILD_ARGS backend
+            timeout 600 docker-compose -f docker-compose.prod.yml build backend || {
+              echo "❌ Backend build failed or timed out"
+              exit 1
+            }
 
-            # Build frontend only if directory exists
+            # Build frontend with progress output to keep connection alive
             if [ -d "frontend" ]; then
-              echo "🔨 Building frontend..."
-              docker-compose -f docker-compose.prod.yml build $BUILD_ARGS frontend
+              echo "🔨 Building frontend (this may take a while)..."
+              # Use nohup to prevent SSH disconnection from killing the build
+              nohup timeout 900 docker-compose -f docker-compose.prod.yml build --progress=plain frontend > /tmp/frontend_build.log 2>&1 &
+              BUILD_PID=$!
+              
+              # Monitor the build and keep connection alive
+              while kill -0 $BUILD_PID 2>/dev/null; do
+                echo "⏳ Frontend build in progress... $(date)"
+                tail -5 /tmp/frontend_build.log 2>/dev/null || echo "Build log not ready yet"
+                sleep 30
+              done
+              
+              wait $BUILD_PID
+              BUILD_EXIT_CODE=$?
+              
+              if [ $BUILD_EXIT_CODE -ne 0 ]; then
+                echo "❌ Frontend build failed"
+                tail -50 /tmp/frontend_build.log
+                exit 1
+              fi
+              
+              echo "✅ Frontend build completed"
             fi
 
             echo "🔄 Rolling update (zero-downtime)..."
@@ -109,7 +119,7 @@ jobs:
 
       - name: Quick Verification
         run: |
-          ssh -o StrictHostKeyChecking=no root@31.97.182.92 << 'EOF'
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 root@31.97.182.92 << 'EOF'
             cd /opt/elshawi_platform/shawi_prj
             echo "📊 Service status:"
             docker-compose -f docker-compose.prod.yml ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
