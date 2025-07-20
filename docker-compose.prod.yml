@@ -36,6 +36,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
+    expose:
+      - 8000
     volumes:
       - ./logs:/app/logs
       - ./media:/app/media

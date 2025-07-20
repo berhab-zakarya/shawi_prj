@@ -239,16 +239,23 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
         },
-      
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
     },
     'loggers': {
-        '': {
-            'handlers': ['console', 'file'],
+        'django': {
+            'handlers': ['console'],
             'level': 'INFO',
-            'propagate': True,
+            'propagate': False,
+        },
+        'celery': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
         },
     },
 }
-
 
 OPENROUTER_API_KEY = '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'
