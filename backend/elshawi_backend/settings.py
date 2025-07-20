@@ -239,11 +239,7 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
         },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(BASE_DIR, 'debug.log'),
-            'level': 'DEBUG',
-        },
+      
     },
     'loggers': {
         '': {
