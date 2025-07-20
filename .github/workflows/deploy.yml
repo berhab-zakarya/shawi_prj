@@ -1,31 +1,30 @@
-name: 🔄 Reload NGINX Config Only
+name: 🔁 Reload Nginx Config
 
 on:
   push:
-    branches:
-      - master
+    paths:
+      - "nginx/**"
+      - ".github/workflows/nginx-reload.yml"
 
 jobs:
   reload-nginx:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📂 Checkout repository
-        uses: actions/checkout@v3
+      - name: Add SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 31.97.182.92 >> ~/.ssh/known_hosts
 
-      - name: 🔐 Connect & Reload NGINX
+      - name: Reload NGINX on VPS
         run: |
           ssh -o StrictHostKeyChecking=no root@31.97.182.92 << 'EOF'
-            echo "🚀 Connected to VPS"
-            cd /opt/elshawi_platform/shawi_prj
-
-            echo "🔍 Checking nginx container name..."
-            docker ps --format "table {{.Names}}\t{{.Image}}"
-
-            echo "🔁 Reloading nginx config..."
-            docker-compose -f docker-compose.prod.yml exec -T nginx nginx -s reload
-
-            echo "✅ NGINX config reloaded successfully!"
+            echo "🔄 Reloading NGINX config..."
+            docker-compose -f /opt/elshawi_platform/shawi_prj/docker-compose.prod.yml exec nginx nginx -s reload
+            echo "✅ NGINX reloaded"
+          EOF
 
 # name: 🚀 Deploy to Hostinger (Ultra Fast)
 
