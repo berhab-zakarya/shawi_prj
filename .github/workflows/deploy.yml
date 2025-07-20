@@ -58,24 +58,29 @@ jobs:
             # Build only if needed with maximum optimization
             echo "🏗️ Smart building with maximum cache..."
             
-            # Enable BuildKit for faster builds
-            export DOCKER_BUILDKIT=1
-            export COMPOSE_DOCKER_CLI_BUILD=1
+            # Smart build strategy with fallback
+            echo "🔧 Checking Docker build capabilities..."
             
-            # Build with aggressive caching
-            docker-compose -f docker-compose.prod.yml build \
-              --parallel \
-              --build-arg BUILDKIT_INLINE_CACHE=1 \
-              --build-arg DOCKER_BUILDKIT=1 \
-              backend
+            # Check if buildx is available for BuildKit
+            if docker buildx version >/dev/null 2>&1; then
+              echo "✅ Using BuildKit with buildx"
+              export DOCKER_BUILDKIT=1
+              export COMPOSE_DOCKER_CLI_BUILD=1
+              BUILD_ARGS="--build-arg BUILDKIT_INLINE_CACHE=1"
+            else
+              echo "⚠️  BuildKit not available, using standard build with cache"
+              unset DOCKER_BUILDKIT COMPOSE_DOCKER_CLI_BUILD
+              BUILD_ARGS=""
+            fi
+            
+            # Build backend with smart caching
+            echo "🔨 Building backend..."
+            docker-compose -f docker-compose.prod.yml build $BUILD_ARGS backend
 
             # Build frontend only if directory exists
             if [ -d "frontend" ]; then
-              docker-compose -f docker-compose.prod.yml build \
-                --parallel \
-                --build-arg BUILDKIT_INLINE_CACHE=1 \
-                --build-arg DOCKER_BUILDKIT=1 \
-                frontend
+              echo "🔨 Building frontend..."
+              docker-compose -f docker-compose.prod.yml build $BUILD_ARGS frontend
             fi
 
             echo "🔄 Rolling update (zero-downtime)..."
