@@ -10,7 +10,7 @@ import { OurServices } from "@/components/landing/sections/OurServices"
 import { LibrarySection } from "@/components/landing/sections/Library"
 import ContactSection from "@/components/landing/sections/Contact"
 import { SectionWithBackground } from "@/components/layout/section-with-background"
-import Pricing from "@/components/landing/sections/pricing"
+import Pricing from "@/components/landing/sections/prices"
 
 export default function Home() {
  
