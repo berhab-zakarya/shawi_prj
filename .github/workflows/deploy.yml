@@ -51,8 +51,6 @@ jobs:
             echo "🛑 Stopping services..."
             docker-compose -f docker-compose.prod.yml down --timeout 30 || true
 
-            echo "🧹 Cleaning up old images..."
-            docker image prune -f || true
 
             echo "🔨 Building and starting services..."
             docker-compose -f docker-compose.prod.yml build --no-cache backend
