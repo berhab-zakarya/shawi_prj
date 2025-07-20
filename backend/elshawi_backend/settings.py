@@ -5,14 +5,37 @@ from datetime import timedelta
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-$_q)*y(1q3=%oq9&$uzlp%7awjpki-puni*xnmil(ad#5@et+g'
+# Environment variables with fallback values
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-fallback-key-change-in-production')
+DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+# Database configuration from environment variables
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('POSTGRES_DB', 'elshawi_db'),
+        'USER': os.getenv('POSTGRES_USER', 'elshawi_user'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'elshawi_pass'),
+        'HOST': os.getenv('POSTGRES_HOST', 'db'),
+        'PORT': os.getenv('POSTGRES_PORT', '5432'),
+    }
+}
+
+# Redis configuration
+REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
+
+# Security settings from environment variables
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False').lower() == 'true'
+SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '31536000'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'True').lower() == 'true'
+SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'True').lower() == 'true'
+
+# Timezone settings
+TIME_ZONE = os.getenv('TIME_ZONE', 'UTC')
+USE_TZ = os.getenv('USE_TZ', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = ["*"]
-CORS_ALLOW_ALL_ORIGINS  = True
+CORS_ALLOW_ALL_ORIGINS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
@@ -23,6 +46,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://31.97.182.92",
     "https://31.97.182.92",
 ]
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -40,13 +64,12 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://.*\.?eilflawyers\.com$",
 ]
 
-
 # Application definition
 INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework.authtoken',
-    'rest_framework_simplejwt.token_blacklist',  # Add this line
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'accounts.apps.AccountsConfig',
     'django.contrib.admin',
@@ -68,6 +91,7 @@ INSTALLED_APPS = [
     'content',
     'invoices'
 ]
+
 DJANGO_CKEDITOR_5_CONFIGS = {
     'default': {
         'toolbar': ['heading', '|', 'bold', 'italic', 'link', 'bulletedList', 'numberedList', 'blockQuote'],
@@ -77,6 +101,7 @@ DJANGO_CKEDITOR_5_CONFIGS = {
 }
 
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -111,8 +136,6 @@ WSGI_APPLICATION = 'elshawi_backend.wsgi.application'
 ASGI_APPLICATION = 'elshawi_backend.asgi.application'
 AUTH_USER_MODEL = 'accounts.User'
 
-
-
 from corsheaders.defaults import default_headers
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'x-is-private-api',
@@ -135,29 +158,9 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,  # Enable refresh token rotation
+    'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
 }
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'elshawi_db',
-        'USER': 'elshawi_user',
-        'PASSWORD': 'elshawi_pass',
-        'HOST': 'db',  # اسم الخدمة في docker-compose
-        'PORT': '5432',
-    }
-}
-
-
-# Database
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -177,16 +180,11 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
 USE_I18N = True
-USE_TZ = True
 
 # Static files
 STATIC_URL = '/static/'
 STATIC_ROOT = '/app/staticfiles'
-# STATICFILES_DIRS = [
-#     os.path.join(BASE_DIR, 'static'),
-# ]
 
 # Media files
 MEDIA_URL = '/media/'
@@ -205,8 +203,8 @@ EMAIL_HOST_PASSWORD = "tcklurubvkjttqhi"
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # Celery configuration
-CELERY_BROKER_URL = 'redis://redis:6379/0'
-CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
 
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
@@ -214,24 +212,15 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 
 # Channels configuration
-# CHANNEL_LAYERS = {
-#     'default': {
-#         'BACKEND': 'channels.layers.InMemoryChannelLayer',
-#         # For production use Redis:
-#         # 'BACKEND': 'channels_redis.core.RedisChannelLayer',
-#         # 'CONFIG': {
-#         #     'hosts': [('redis', 6379)],
-#         # },
-#     },
-# }
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [('redis', 6379)],  # Match Celery's Redis port
+            "hosts": [REDIS_URL],
         },
     },
 }
+
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
@@ -270,4 +259,5 @@ LOGGING = {
     },
 }
 
-OPENROUTER_API_KEY = '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'
+# OpenRouter API Key
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', 'sk-or-v1-57dfa6e2df9e6bee75c634ad90dba30b5bcfb9fd04')
