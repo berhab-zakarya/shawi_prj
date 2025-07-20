@@ -1,4 +1,4 @@
-name: 🚀 Deploy to Hostinger
+name: 🚀 Deploy to Hostinger (Optimized)
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no root@31.97.182.92 << 'EOF'
             set -e
 
-            echo "🚀 Starting deployment..."
+            echo "🚀 Starting optimized deployment..."
 
             REPO_DIR="/opt/elshawi_platform/shawi_prj"
 
@@ -48,27 +48,43 @@ jobs:
               exit 1
             fi
 
-            echo "🛑 Stopping services..."
+            echo "🧹 Cleaning up old containers (keep volumes)..."
             docker-compose -f docker-compose.prod.yml down --timeout 30 || true
 
+            echo "🏗️ Building images with cache..."
+            # Build backend with cache
+            docker-compose -f docker-compose.prod.yml build \
+              --build-arg BUILDKIT_INLINE_CACHE=1 \
+              backend
 
-            echo "🔨 Building and starting services..."
-            docker-compose -f docker-compose.prod.yml build --no-cache backend
+            # Build frontend with cache (if it exists)
+            if [ -d "frontend" ]; then
+              docker-compose -f docker-compose.prod.yml build \
+                --build-arg BUILDKIT_INLINE_CACHE=1 \
+                frontend
+            fi
+
+            echo "🚀 Starting services..."
             docker-compose -f docker-compose.prod.yml up -d
 
-            echo "⏳ Waiting for services to start..."
-            sleep 30
+            echo "⏳ Waiting for services to be healthy..."
+            timeout 120 bash -c 'until docker-compose -f docker-compose.prod.yml ps | grep -q "healthy\|Up"; do sleep 5; done'
 
             echo "🏥 Checking service health..."
             docker-compose -f docker-compose.prod.yml ps
 
-            if curl -f http://localhost:80/api/ > /dev/null 2>&1; then
-              echo "✅ Backend is responding"
+            # Wait a bit more for the application to fully start
+            sleep 20
+
+            if curl -f http://localhost/ > /dev/null 2>&1; then
+              echo "✅ Application is responding"
             else
-              echo "❌ Backend health check failed"
-              docker-compose -f docker-compose.prod.yml logs backend
+              echo "❌ Application health check failed"
+              docker-compose -f docker-compose.prod.yml logs --tail=50 backend
+              docker-compose -f docker-compose.prod.yml logs --tail=50 nginx
               exit 1
             fi
+
 
             echo "🎉 Deployment completed successfully!"
           EOF
@@ -81,4 +97,6 @@ jobs:
             docker-compose -f docker-compose.prod.yml ps
             echo "💾 Disk usage:"
             df -h /opt/elshawi_platform
+            echo "🐳 Docker images:"
+            docker images | head -10
           EOF
