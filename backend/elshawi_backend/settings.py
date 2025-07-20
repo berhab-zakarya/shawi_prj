@@ -236,13 +236,14 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'handlers': {
-        # 'console': {
-        #     'class': 'logging.StreamHandler',
-        # },
-        # 'file': {
-        #     'class': 'logging.FileHandler',
-        #     'filename': 'debug.log',
-        # },
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'debug.log'),
+            'level': 'DEBUG',
+        },
     },
     'loggers': {
         '': {
@@ -252,5 +253,6 @@ LOGGING = {
         },
     },
 }
+
 
 OPENROUTER_API_KEY = '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'
