@@ -1,4 +1,4 @@
-export const API_BASE_URL = "http://127.0.0.1:8000/api/v1/"
+export const API_BASE_URL = "eilflawyers.com/api/api/v1/"
 export const REFRESH_TOKEN_ENDPOINT = `${API_BASE_URL}token/refresh/`;
 export const LOGIN_ENDPOINT = `${API_BASE_URL}auth/login/`;
 export const REGISTER_ENDPOINT = `${API_BASE_URL}auth/register/`;

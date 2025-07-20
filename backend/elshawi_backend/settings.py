@@ -9,25 +9,37 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-$_q)*y(1q3=%oq9&$uzlp%7awjpki-puni*xnmil(ad#5@et+g'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ["*"]
 CORS_ALLOW_ALL_ORIGINS  = True
 
-
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
-    "http://localhost:8001",    # Add this line
-    "http://127.0.0.1:8001",    # Add this line too
+    "http://localhost:8001",
+    "http://127.0.0.1:8001",
+    "https://eilflawyers.com",
+    "http://eilflawyers.com",
+    "http://31.97.182.92",
+    "https://31.97.182.92",
 ]
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://localhost:8000",    # Backend service
-    "http://localhost:8001",    # Daphne service
-    "ws://localhost:8001",      # WebSocket connections
+    "http://localhost:8000",
+    "http://localhost:8001",
+    "ws://localhost:8001",
     "ws://127.0.0.1:8001",
+    "https://eilflawyers.com",
+    "http://eilflawyers.com",
+    "https://31.97.182.92",
+    "http://31.97.182.92",
 ]
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.?eilflawyers\.com$",
+]
+
 
 # Application definition
 INSTALLED_APPS = [
