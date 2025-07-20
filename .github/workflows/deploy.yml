@@ -1,32 +1,32 @@
-name: 🚀 Deploy Frontend Only (Next.js)
+# name: 🚀 Deploy Frontend Only (Next.js)
 
-on:
-  push:
-    paths:
-      -  ".github/workflows/deploy.yml"
-    branches:
-      - master
+# on:
+#   push:
+#     paths:
+#       -  ".github/workflows/deploy.yml"
+#     branches:
+#       - master
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
 
-    steps:
-      - name: ⬇️ Checkout code
-        uses: actions/checkout@v3
+#     steps:
+#       - name: ⬇️ Checkout code
+#         uses: actions/checkout@v3
 
-      - name: 🐳 Set up Docker
-        uses: docker/setup-buildx-action@v3
+#       - name: 🐳 Set up Docker
+#         uses: docker/setup-buildx-action@v3
 
-      - name: 🏗️ Build frontend only
-        run: |
-          echo "🛠️ Building frontend..."
-          docker-compose -f docker-compose.prod.yml build frontend
+#       - name: 🏗️ Build frontend only
+#         run: |
+#           echo "🛠️ Building frontend..."
+#           docker-compose -f docker-compose.prod.yml build frontend
 
-      - name: 🚀 Deploy frontend only
-        run: |
-          echo "📦 Recreating frontend container..."
-          docker-compose -f docker-compose.prod.yml up -d --no-deps --build frontend
+#       - name: 🚀 Deploy frontend only
+#         run: |
+#           echo "📦 Recreating frontend container..."
+#           docker-compose -f docker-compose.prod.yml up -d --no-deps --build frontend
 
 # name: 🔁 Reload Nginx Config
 
@@ -56,126 +56,126 @@ jobs:
 #             echo "✅ NGINX reloaded"
 #           EOF
 
-# name: 🚀 Deploy to Hostinger (Ultra Fast)
+name: 🚀 Deploy to Hostinger (Ultra Fast)
 
-# on:
-#   push:
-#     branches:
-#       - master
+on:
+  push:
+    branches:
+      - master
 
-# jobs:
-#   deploy:
-#     runs-on: ubuntu-latest
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-#       - name: Add SSH key
-#         run: |
-#           mkdir -p ~/.ssh
-#           echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_rsa
-#           chmod 600 ~/.ssh/id_rsa
-#           ssh-keyscan -H 31.97.182.92 >> ~/.ssh/known_hosts
+      - name: Add SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 31.97.182.92 >> ~/.ssh/known_hosts
 
-#       - name: Deploy to Hostinger
-#         run: |
-#           ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 root@31.97.182.92 << 'EOF'
-#             set -e
+      - name: Deploy to Hostinger
+        run: |
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 root@31.97.182.92 << 'EOF'
+            set -e
 
-#             echo "🚀 Starting ultra-fast deployment..."
+            echo "🚀 Starting ultra-fast deployment..."
 
-#             REPO_DIR="/opt/elshawi_platform/shawi_prj"
+            REPO_DIR="/opt/elshawi_platform/shawi_prj"
 
-#             # Quick repository update
-#             if [ ! -d "$REPO_DIR" ]; then
-#               echo "📂 Creating project directory..."
-#               mkdir -p /opt/elshawi_platform
-#               cd /opt/elshawi_platform
-#               git clone --depth 1 https://github.com/berhab-zakarya/shawi_prj.git shawi_prj
-#             else
-#               echo "🔄 Quick repository update..."
-#               cd "$REPO_DIR"
-#               # Only fetch what we need
-#               git fetch origin master --depth 1
-#               git reset --hard origin/master
-#             fi
+            # Quick repository update
+            if [ ! -d "$REPO_DIR" ]; then
+              echo "📂 Creating project directory..."
+              mkdir -p /opt/elshawi_platform
+              cd /opt/elshawi_platform
+              git clone --depth 1 https://github.com/berhab-zakarya/shawi_prj.git shawi_prj
+            else
+              echo "🔄 Quick repository update..."
+              cd "$REPO_DIR"
+              # Only fetch what we need
+              git fetch origin master --depth 1
+              git reset --hard origin/master
+            fi
 
-#             cd "$REPO_DIR"
+            cd "$REPO_DIR"
 
-#             # Check if .env.prod exists
-#             if [ ! -f .env.prod ]; then
-#               echo "❌ .env.prod not found! Deployment aborted."
-#               exit 1
-#             fi
+            # Check if .env.prod exists
+            if [ ! -f .env.prod ]; then
+              echo "❌ .env.prod not found! Deployment aborted."
+              exit 1
+            fi
 
-#             echo "🔍 Checking for actual changes..."
-#             # Get current running image IDs to compare
-#             CURRENT_BACKEND_ID=$(docker-compose -f docker-compose.prod.yml images -q backend 2>/dev/null || echo "none")
+            echo "🔍 Checking for actual changes..."
+            # Get current running image IDs to compare
+            CURRENT_BACKEND_ID=$(docker-compose -f docker-compose.prod.yml images -q backend 2>/dev/null || echo "none")
             
-#             # Build only if needed with maximum optimization
-#             echo "🏗️ Smart building with maximum cache..."
+            # Build only if needed with maximum optimization
+            echo "🏗️ Smart building with maximum cache..."
             
-#             echo "🔨 Building with optimized approach..."
+            echo "🔨 Building with optimized approach..."
             
-#             # Build backend first (usually faster)
-#             echo "🔨 Building backend..."
-#             docker-compose -f docker-compose.prod.yml build backend
+            # Build backend first (usually faster)
+            echo "🔨 Building backend..."
+            docker-compose -f docker-compose.prod.yml build backend
 
-#             # Build frontend with periodic output to keep connection alive
-#             if [ -d "frontend" ]; then
-#               echo "🔨 Building frontend..."
-#               # Use script to build with periodic keepalive
-#               (
-#                 docker-compose -f docker-compose.prod.yml build frontend &
-#                 BUILD_PID=$!
+            # Build frontend with periodic output to keep connection alive
+            if [ -d "frontend" ]; then
+              echo "🔨 Building frontend..."
+              # Use script to build with periodic keepalive
+              (
+                docker-compose -f docker-compose.prod.yml build frontend &
+                BUILD_PID=$!
                 
-#                 while kill -0 $BUILD_PID 2>/dev/null; do
-#                   echo "⏳ Still building frontend... $(date)"
-#                   sleep 30
-#                 done
+                while kill -0 $BUILD_PID 2>/dev/null; do
+                  echo "⏳ Still building frontend... $(date)"
+                  sleep 30
+                done
                 
-#                 wait $BUILD_PID
-#                 echo $? > /tmp/build_exit_code
-#               ) 2>&1
+                wait $BUILD_PID
+                echo $? > /tmp/build_exit_code
+              ) 2>&1
               
-#               # Check build result
-#               BUILD_EXIT_CODE=$(cat /tmp/build_exit_code 2>/dev/null || echo "1")
-#               if [ "$BUILD_EXIT_CODE" -ne 0 ]; then
-#                 echo "❌ Frontend build failed"
-#                 exit 1
-#               fi
-#               echo "✅ Frontend build completed"
-#             fi
+              # Check build result
+              BUILD_EXIT_CODE=$(cat /tmp/build_exit_code 2>/dev/null || echo "1")
+              if [ "$BUILD_EXIT_CODE" -ne 0 ]; then
+                echo "❌ Frontend build failed"
+                exit 1
+              fi
+              echo "✅ Frontend build completed"
+            fi
 
-#             echo "🔄 Rolling update (zero-downtime)..."
+            echo "🔄 Rolling update (zero-downtime)..."
             
-#             # Use rolling update strategy instead of stopping everything
-#             docker-compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans
+            # Use rolling update strategy instead of stopping everything
+            docker-compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans
             
-#             # Quick health check (reduced timeout)
-#             echo "⚡ Quick health check..."
-#             timeout 60 bash -c '
-#               while ! curl -f http://localhost/ >/dev/null 2>&1; do 
-#                 sleep 2
-#                 echo "Waiting for app..."
-#               done
-#             ' || {
-#               echo "❌ Quick health check failed, checking logs..."
-#               docker-compose -f docker-compose.prod.yml logs --tail=20 backend
-#               exit 1
-#             }
+            # Quick health check (reduced timeout)
+            echo "⚡ Quick health check..."
+            timeout 60 bash -c '
+              while ! curl -f http://localhost/ >/dev/null 2>&1; do 
+                sleep 2
+                echo "Waiting for app..."
+              done
+            ' || {
+              echo "❌ Quick health check failed, checking logs..."
+              docker-compose -f docker-compose.prod.yml logs --tail=20 backend
+              exit 1
+            }
 
-#             # Clean up old unused images to save space (run in background)
-#             (docker image prune -f --filter "dangling=true" &) || true
+            # Clean up old unused images to save space (run in background)
+            (docker image prune -f --filter "dangling=true" &) || true
 
-#             echo "✅ Ultra-fast deployment completed!"
-#           EOF
+            echo "✅ Ultra-fast deployment completed!"
+          EOF
 
-#       - name: Quick Verification
-#         run: |
-#           ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 root@31.97.182.92 << 'EOF'
-#             cd /opt/elshawi_platform/shawi_prj
-#             echo "📊 Service status:"
-#             docker-compose -f docker-compose.prod.yml ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
-#           EOF
+      - name: Quick Verification
+        run: |
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 root@31.97.182.92 << 'EOF'
+            cd /opt/elshawi_platform/shawi_prj
+            echo "📊 Service status:"
+            docker-compose -f docker-compose.prod.yml ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+          EOF
