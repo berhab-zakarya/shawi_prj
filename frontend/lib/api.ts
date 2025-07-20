@@ -26,6 +26,13 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
+function getCookie(name: string): string | null {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()!.split(';').shift() || null;
+  return null;
+}
+
 // Add token if private API
 axiosInstance.interceptors.request.use(
   (config) => {
@@ -35,10 +42,24 @@ axiosInstance.interceptors.request.use(
         config.headers['Authorization'] = `Bearer ${token}`;
       }
     }
+
+    // ✅ أضف CSRF token إذا كان الطلب من نوع تعديل أو يتطلب حماية
+    const method = config.method?.toUpperCase();
+    const csrfSafeMethod = ['GET', 'HEAD', 'OPTIONS', 'TRACE'];
+
+    if (!csrfSafeMethod.includes(method || '')) {
+      const csrfToken = getCookie('csrftoken');
+      if (csrfToken) {
+        config.headers['X-CSRFToken'] = csrfToken;
+      }
+    }
+
+    config.withCredentials = true; // ضروري لإرسال الكوكيز
     return config;
   },
   (error) => Promise.reject(error)
 );
+
 
 // Extend Axios config to support _retry
 interface RetryConfig extends AxiosRequestConfig {
