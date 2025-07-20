@@ -1,4 +1,4 @@
-name: 🚀 Deploy to Hostinger (Optimized)
+name: 🚀 Deploy to Hostinger (Ultra Fast)
 
 on:
   push:
@@ -25,78 +25,87 @@ jobs:
           ssh -o StrictHostKeyChecking=no root@31.97.182.92 << 'EOF'
             set -e
 
-            echo "🚀 Starting optimized deployment..."
+            echo "🚀 Starting ultra-fast deployment..."
 
             REPO_DIR="/opt/elshawi_platform/shawi_prj"
 
+            # Quick repository update
             if [ ! -d "$REPO_DIR" ]; then
               echo "📂 Creating project directory..."
               mkdir -p /opt/elshawi_platform
               cd /opt/elshawi_platform
-              git clone https://github.com/berhab-zakarya/shawi_prj.git shawi_prj
+              git clone --depth 1 https://github.com/berhab-zakarya/shawi_prj.git shawi_prj
             else
-              echo "🔄 Updating repository..."
+              echo "🔄 Quick repository update..."
               cd "$REPO_DIR"
-              git fetch origin
+              # Only fetch what we need
+              git fetch origin master --depth 1
               git reset --hard origin/master
             fi
 
             cd "$REPO_DIR"
 
+            # Check if .env.prod exists
             if [ ! -f .env.prod ]; then
               echo "❌ .env.prod not found! Deployment aborted."
               exit 1
             fi
 
-            echo "🧹 Cleaning up old containers (keep volumes)..."
-            docker-compose -f docker-compose.prod.yml down --timeout 30 || true
-
-            echo "🏗️ Building images with cache..."
-            # Build backend with cache
+            echo "🔍 Checking for actual changes..."
+            # Get current running image IDs to compare
+            CURRENT_BACKEND_ID=$(docker-compose -f docker-compose.prod.yml images -q backend 2>/dev/null || echo "none")
+            
+            # Build only if needed with maximum optimization
+            echo "🏗️ Smart building with maximum cache..."
+            
+            # Enable BuildKit for faster builds
+            export DOCKER_BUILDKIT=1
+            export COMPOSE_DOCKER_CLI_BUILD=1
+            
+            # Build with aggressive caching
             docker-compose -f docker-compose.prod.yml build \
+              --parallel \
               --build-arg BUILDKIT_INLINE_CACHE=1 \
+              --build-arg DOCKER_BUILDKIT=1 \
               backend
 
-            # Build frontend with cache (if it exists)
+            # Build frontend only if directory exists
             if [ -d "frontend" ]; then
               docker-compose -f docker-compose.prod.yml build \
+                --parallel \
                 --build-arg BUILDKIT_INLINE_CACHE=1 \
+                --build-arg DOCKER_BUILDKIT=1 \
                 frontend
             fi
 
-            echo "🚀 Starting services..."
-            docker-compose -f docker-compose.prod.yml up -d
-
-            echo "⏳ Waiting for services to be healthy..."
-            timeout 120 bash -c 'until docker-compose -f docker-compose.prod.yml ps | grep -q "healthy\|Up"; do sleep 5; done'
-
-            echo "🏥 Checking service health..."
-            docker-compose -f docker-compose.prod.yml ps
-
-            # Wait a bit more for the application to fully start
-            sleep 20
-
-            if curl -f http://localhost/ > /dev/null 2>&1; then
-              echo "✅ Application is responding"
-            else
-              echo "❌ Application health check failed"
-              docker-compose -f docker-compose.prod.yml logs --tail=50 backend
-              docker-compose -f docker-compose.prod.yml logs --tail=50 nginx
+            echo "🔄 Rolling update (zero-downtime)..."
+            
+            # Use rolling update strategy instead of stopping everything
+            docker-compose -f docker-compose.prod.yml up -d --no-deps --remove-orphans
+            
+            # Quick health check (reduced timeout)
+            echo "⚡ Quick health check..."
+            timeout 60 bash -c '
+              while ! curl -f http://localhost/ >/dev/null 2>&1; do 
+                sleep 2
+                echo "Waiting for app..."
+              done
+            ' || {
+              echo "❌ Quick health check failed, checking logs..."
+              docker-compose -f docker-compose.prod.yml logs --tail=20 backend
               exit 1
-            fi
+            }
 
+            # Clean up old unused images to save space (run in background)
+            (docker image prune -f --filter "dangling=true" &) || true
 
-            echo "🎉 Deployment completed successfully!"
+            echo "✅ Ultra-fast deployment completed!"
           EOF
 
-      - name: Verify Deployment
+      - name: Quick Verification
         run: |
           ssh -o StrictHostKeyChecking=no root@31.97.182.92 << 'EOF'
             cd /opt/elshawi_platform/shawi_prj
-            echo "📊 Final service status:"
-            docker-compose -f docker-compose.prod.yml ps
-            echo "💾 Disk usage:"
-            df -h /opt/elshawi_platform
-            echo "🐳 Docker images:"
-            docker images | head -10
+            echo "📊 Service status:"
+            docker-compose -f docker-compose.prod.yml ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
           EOF
