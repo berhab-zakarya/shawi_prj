@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     libpangocairo-1.0-0 \
     fonts-liberation \
     fonts-dejavu \
+    curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -25,17 +26,31 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY . .
 
 # Create non-root user for security
-RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
+RUN useradd --create-home --shell /bin/bash app
+
+# Create staticfiles directory and set proper permissions
+RUN mkdir -p /app/staticfiles && \
+    chown -R app:app /app
 
 # Expose port
 EXPOSE 8000
 
-# Use root to collect static files (env vars must be defined at runtime)
-USER root
-RUN python manage.py collectstatic --noinput || echo "Skipping collectstatic"
-
-# Switch to non-root user
+# Switch to app user
 USER app
 
-# Start Gunicorn
-CMD ["gunicorn", "elshawi_backend.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
+# Create startup script to handle collectstatic at runtime
+COPY --chown=app:app <<EOF /app/start.sh
+#!/bin/bash
+set -e
+
+echo "Collecting static files..."
+python manage.py collectstatic --noinput
+
+echo "Starting Gunicorn..."
+exec gunicorn elshawi_backend.wsgi:application --bind 0.0.0.0:8000 --workers 3
+EOF
+
+RUN chmod +x /app/start.sh
+
+# Start with our custom script
+CMD ["/app/start.sh"]

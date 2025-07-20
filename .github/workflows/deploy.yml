@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Add SSH key
         run: |
@@ -22,19 +22,65 @@ jobs:
 
       - name: Deploy to Hostinger
         run: |
-          ssh -o StrictHostKeyChecking=no root@31.97.182.92 '
+          ssh -o StrictHostKeyChecking=no root@31.97.182.92 << 'EOF'
             set -e
+
+            echo "🚀 Starting deployment..."
+
             REPO_DIR="/opt/elshawi_platform/shawi_prj"
+
             if [ ! -d "$REPO_DIR" ]; then
+              echo "📂 Creating project directory..."
               mkdir -p /opt/elshawi_platform
               cd /opt/elshawi_platform
               git clone https://github.com/berhab-zakarya/shawi_prj.git shawi_prj
             else
+              echo "🔄 Updating repository..."
               cd "$REPO_DIR"
-              git pull
+              git fetch origin
+              git reset --hard origin/master
             fi
 
             cd "$REPO_DIR"
-            docker-compose -f docker-compose.prod.yml down
+
+            if [ ! -f .env.prod ]; then
+              echo "❌ .env.prod not found! Deployment aborted."
+              exit 1
+            fi
+
+            echo "🛑 Stopping services..."
+            docker-compose -f docker-compose.prod.yml down --timeout 30 || true
+
+            echo "🧹 Cleaning up old images..."
+            docker image prune -f || true
+
+            echo "🔨 Building and starting services..."
+            docker-compose -f docker-compose.prod.yml build --no-cache backend
             docker-compose -f docker-compose.prod.yml up -d
-          '
+
+            echo "⏳ Waiting for services to start..."
+            sleep 30
+
+            echo "🏥 Checking service health..."
+            docker-compose -f docker-compose.prod.yml ps
+
+            if curl -f http://localhost:80/api/ > /dev/null 2>&1; then
+              echo "✅ Backend is responding"
+            else
+              echo "❌ Backend health check failed"
+              docker-compose -f docker-compose.prod.yml logs backend
+              exit 1
+            fi
+
+            echo "🎉 Deployment completed successfully!"
+          EOF
+
+      - name: Verify Deployment
+        run: |
+          ssh -o StrictHostKeyChecking=no root@31.97.182.92 << 'EOF'
+            cd /opt/elshawi_platform/shawi_prj
+            echo "📊 Final service status:"
+            docker-compose -f docker-compose.prod.yml ps
+            echo "💾 Disk usage:"
+            df -h /opt/elshawi_platform
+          EOF
