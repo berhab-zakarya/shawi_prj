@@ -28,7 +28,7 @@ export function WebSocketProvider({ children, userId, userRole }: WebSocketProvi
   useEffect(() => {
     if (!userId) return
 
-    const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000"}/ws/dashboard/?user_id=${userId}&role=${userRole}`
+    const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "wss://eilflawyers.com"}/ws/dashboard/?user_id=${userId}&role=${userRole}`
     const websocket = new WebSocket(wsUrl)
 
     websocket.onopen = () => {

@@ -5,9 +5,11 @@ import { FileText, Brain, Scale, PenTool, Download } from "lucide-react"
 import { GlowingEffect } from "@/components/ui/glowing-effect"
 import HeroSectionTextHover from "@/components/animata/hero/hero-section-text-hover"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 
 export function AIRag() {
   const [isVisible, setIsVisible] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -27,12 +29,12 @@ export function AIRag() {
 
   return (
     <div id="airag-section" dir="rtl" className="w-full pt-8 md:pt-16 lg:pt-32">
-      {/* Enhanced Section Header */}
+      {/* Section Header */}
       <div className="text-center mb-16">
         <div
           className={`transition-all duration-1000 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
         >
-          <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+          <div className="inline-flex items-center gap-2 bg-[#D4AF37]/10 text-[#D4AF37] px-4 py-2 rounded-full text-sm font-medium mb-6">
             <Brain className="w-4 h-4" />
             نظام ذكي متطور
           </div>
@@ -43,22 +45,22 @@ export function AIRag() {
         </div>
       </div>
 
-      {/* Enhanced Grid Layout */}
+      {/* Grid Layout */}
       <div className="grid grid-cols-12 gap-6 lg:gap-8">
-        {/* Feature 1 - Upload & Analysis */}
+        {/* Feature 1 */}
         <div className="col-span-12 md:col-span-6 lg:col-span-4">
           <GridItem
-            icon={<FileText className="h-6 w-6 text-blue-600" />}
+            icon={<FileText className="h-6 w-6 text-[#D4AF37]" />}
             title="رفع وتحليل"
             description="ارفع ملفات Word/PDF بسهولة لتحليل فوري ودقيق باستخدام أحدث تقنيات الذكاء الاصطناعي"
             delay={0}
             isVisible={isVisible}
             gradient="from-blue-50 to-blue-100"
-            iconBg="bg-blue-100"
+            iconBg="bg-[#D4AF37]/10"
           />
         </div>
 
-        {/* Feature 2 - Smart Extraction */}
+        {/* Feature 2 */}
         <div className="col-span-12 md:col-span-6 lg:col-span-4">
           <GridItem
             icon={<Brain className="h-6 w-6 text-purple-600" />}
@@ -71,7 +73,7 @@ export function AIRag() {
           />
         </div>
 
-        {/* Feature 3 - Judgment Comparison */}
+        {/* Feature 3 */}
         <div className="col-span-12 md:col-span-6 lg:col-span-4">
           <GridItem
             icon={<Scale className="h-6 w-6 text-green-600" />}
@@ -84,7 +86,7 @@ export function AIRag() {
           />
         </div>
 
-        {/* Feature 4 - Suggestion & Drafting */}
+        {/* Feature 4 */}
         <div className="col-span-12 md:col-span-6 lg:col-span-6">
           <GridItem
             icon={<PenTool className="h-6 w-6 text-orange-600" />}
@@ -98,7 +100,7 @@ export function AIRag() {
           />
         </div>
 
-        {/* Feature 5 - Direct Download */}
+        {/* Feature 5 */}
         <div className="col-span-12 md:col-span-6 lg:col-span-6">
           <GridItem
             icon={<Download className="h-6 w-6 text-red-600" />}
@@ -111,6 +113,16 @@ export function AIRag() {
             featured={true}
           />
         </div>
+      </div>
+
+      {/* CTA Section */}
+      <div className="text-center mt-16">
+        <button
+          className="bg-gradient-to-r from-[#D4AF37] to-[#B8941F] text-white px-8 py-4 rounded-xl font-semibold text-lg hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1"
+          onClick={() => router.push("/auth")}
+        >
+          اكتشف المزيد عن النظام الذكي
+        </button>
       </div>
     </div>
   )

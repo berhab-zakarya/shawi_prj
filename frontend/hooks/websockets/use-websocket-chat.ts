@@ -85,7 +85,7 @@ export function useWebSocketChat() {
 
         console.debug(`[connectToRoom] Establishing connection to chat-${roomName}`)
         await connect(`chat-${roomName}`, {
-          url: `ws://localhost:8001/ws/chat/${roomName}/`,
+          url: `wss://eilflawyers.com/ws/chat/${roomName}/`,
           reconnectAttempts: 5,
           reconnectDelay: 1000,
           heartbeatInterval: 30000,
@@ -117,7 +117,7 @@ export function useWebSocketChat() {
       }
 
       await connect("presence", {
-        url: "ws://localhost:8001/ws/presence/",
+        url: "wss://eilflawyers.com/ws/presence/",
         reconnectAttempts: 5,
         reconnectDelay: 1000,
         heartbeatInterval: 30000,
@@ -144,7 +144,7 @@ export function useWebSocketChat() {
       }
 
       await connect("notifications", {
-        url: "ws://localhost:8001/ws/notifications/",
+        url: "wss://eilflawyers.com/ws/notifications/",
         reconnectAttempts: 5,
         reconnectDelay: 1000,
         heartbeatInterval: 30000,

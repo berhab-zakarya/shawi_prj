@@ -2,6 +2,9 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+html {
+  scroll-behavior: smooth;
+}
 
 :root {
   --font-arabic-primary: 'Noto Naskh Arabic', 'Segoe UI Arabic', 'Tahoma', 'Arial Unicode MS', sans-serif;

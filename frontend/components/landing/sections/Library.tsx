@@ -12,11 +12,13 @@ import {
   IconRouteAltLeft,
   IconTerminal2,
 } from "@tabler/icons-react"
-import { ArrowLeft, BookOpen, Users, TrendingUp } from 'lucide-react'
+import { ArrowLeft, BookOpen, Users, TrendingUp } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 export function LibrarySection() {
   const [isVisible, setIsVisible] = useState(false)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const router = useRouter()
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -40,7 +42,6 @@ export function LibrarySection() {
       description: "نصوص رسمية محدثة ومصنفة بعناية فائقة",
       buttonText: "تصفح القسم",
       icon: <IconTerminal2 />,
-      count: "500+",
       color: "blue",
       stats: "محدث يومياً",
     },
@@ -49,7 +50,6 @@ export function LibrarySection() {
       description: "أحكام مشروحة من المحاكم العليا والمتخصصة",
       buttonText: "تصفح القسم",
       icon: <IconEaseInOut />,
-      count: "1,200+",
       color: "green",
       stats: "من جميع المحاكم",
     },
@@ -58,7 +58,6 @@ export function LibrarySection() {
       description: "نماذج وصيغ قانونية متنوعة وقابلة للتخصيص",
       buttonText: "تصفح القسم",
       icon: <IconCurrencyDollar />,
-      count: "300+",
       color: "purple",
       stats: "جاهز للاستخدام",
     },
@@ -67,7 +66,6 @@ export function LibrarySection() {
       description: "مذكرات واقعية وأبحاث متخصصة من خبراء القانون",
       buttonText: "تصفح القسم",
       icon: <IconCloud />,
-      count: "800+",
       color: "orange",
       stats: "من الخبراء",
     },
@@ -76,7 +74,6 @@ export function LibrarySection() {
       description: "مراجع وكتب قيمة قابلة للتحميل والطباعة",
       buttonText: "تصفح القسم",
       icon: <IconRouteAltLeft />,
-      count: "150+",
       color: "red",
       stats: "كتاب متخصص",
     },
@@ -85,7 +82,6 @@ export function LibrarySection() {
       description: "قوانين وأحكام دولية للمقارنة والدراسة",
       buttonText: "تصفح القسم",
       icon: <IconHelp />,
-      count: "2,000+",
       color: "teal",
       stats: "من 50+ دولة",
     },
@@ -94,12 +90,12 @@ export function LibrarySection() {
   return (
     <div id="library-section" className="pt-8 md:pt-16 lg:pt-32" dir="rtl">
       <div className="max-w-7xl mx-auto">
-        {/* Enhanced Header */}
+        {/* Header */}
         <div className="text-center mb-16">
           <div
             className={`transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
           >
-            <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 bg-[#D4AF37]/10 text-[#D4AF37] px-4 py-2 rounded-full text-sm font-medium mb-6">
               <BookOpen className="w-4 h-4" />
               مكتبة شاملة
             </div>
@@ -110,7 +106,7 @@ export function LibrarySection() {
           </div>
         </div>
 
-        {/* Enhanced Features Grid */}
+        {/* Features Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 relative z-10 max-w-7xl mx-auto gap-8">
           {features.map((feature, index) => (
             <Feature
@@ -118,6 +114,7 @@ export function LibrarySection() {
               {...feature}
               index={index}
               isVisible={isVisible}
+
               isHovered={hoveredIndex === index}
               onHover={() => setHoveredIndex(index)}
               onLeave={() => setHoveredIndex(null)}
@@ -158,6 +155,16 @@ export function LibrarySection() {
             </div>
           </div>
         </div>
+
+        {/* CTA Section */}
+        <div className="text-center mt-16">
+          <button
+            onClick={() => router.push("/auth")}
+            className="bg-gradient-to-r from-[#D4AF37] to-[#B8941F] text-white px-8 py-4 rounded-xl font-semibold text-lg hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1"
+          >
+            استكشف المكتبة الكاملة
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -169,7 +176,6 @@ const Feature = ({
   buttonText,
   icon,
   index,
-  count,
   color,
   stats,
   isVisible,
@@ -182,7 +188,6 @@ const Feature = ({
   buttonText: string
   icon: React.ReactNode
   index: number
-  count: string
   color: string
   stats: string
   isVisible: boolean
@@ -191,16 +196,19 @@ const Feature = ({
   onLeave: () => void
 }) => {
   const colorClasses = {
-    blue: "border-blue-200 hover:border-blue-300 bg-blue-50 text-blue-600",
+    blue: "border-blue-200 hover:border-blue-300 bg-blue-50 text-[#D4AF37]",
     green: "border-green-200 hover:border-green-300 bg-green-50 text-green-600",
     purple: "border-purple-200 hover:border-purple-300 bg-purple-50 text-purple-600",
     orange: "border-orange-200 hover:border-orange-300 bg-orange-50 text-orange-600",
     red: "border-red-200 hover:border-red-300 bg-red-50 text-red-600",
     teal: "border-teal-200 hover:border-teal-300 bg-teal-50 text-teal-600",
   }
-
+  const router = useRouter();
   return (
     <div
+    onClick={()=>{
+      router.push('/auth')
+    }}
       className={cn(
         "flex flex-col border-2 py-12 px-8 relative group cursor-pointer rounded-2xl transition-all duration-300 bg-white hover:shadow-xl",
         colorClasses[color as keyof typeof colorClasses] || colorClasses.blue,
@@ -216,11 +224,6 @@ const Feature = ({
         <div className="absolute top-4 right-4 text-6xl">{icon}</div>
       </div>
 
-      {/* Count Badge */}
-      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-bold text-gray-700 shadow-sm">
-        {count}
-      </div>
-
       {/* Icon */}
       <div className="mb-6 relative z-10 text-neutral-600 dark:text-neutral-400 transform transition-transform duration-300 group-hover:scale-110">
         <div className="w-12 h-12">{icon}</div>
@@ -228,8 +231,8 @@ const Feature = ({
 
       {/* Content */}
       <div className="flex-1 space-y-4 relative z-10">
-        <div className="absolute right-0 inset-y-0 h-6 group-hover:h-8 w-1 rounded-tl-full rounded-bl-full bg-neutral-300 dark:bg-neutral-700 group-hover:bg-blue-500 transition-all duration-200 origin-center" />
-        
+        <div className="absolute right-0 inset-y-0 h-6 group-hover:h-8 w-1 rounded-tl-full rounded-bl-full bg-neutral-300 dark:bg-neutral-700 group-hover:bg-[#D4AF37] transition-all duration-200 origin-center" />
+
         <h3 className="text-lg md:text-xl font-bold mb-2 relative z-10 text-neutral-800 dark:text-neutral-100 group-hover:-translate-x-2 transition-transform duration-200">
           {title}
         </h3>
@@ -243,7 +246,7 @@ const Feature = ({
 
       {/* Action Button */}
       <div className="relative z-10 mt-6">
-        <button className="flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors duration-200 group/btn">
+        <button className="flex items-center gap-2 text-sm font-medium text-[#D4AF37] dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors duration-200 group/btn">
           <span>{buttonText}</span>
           <ArrowLeft className="w-4 h-4 transform rotate-180 group-hover/btn:-translate-x-1 transition-transform duration-200" />
         </button>

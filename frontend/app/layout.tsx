@@ -1,11 +1,12 @@
+// app/layout.tsx or app/root-layout.tsx
 import "./globals.css"
 import type { Metadata } from "next"
 import { Noto_Naskh_Arabic, Amiri, Cairo } from "next/font/google"
 import { ToastProvider, ToastViewport } from "@/components/ui/toast"
 import { ToastListener } from "@/components/ToastListener"
 import { ToastDisplay } from "@/components/Toast-Display"
+import ClientLayoutWrapper from "./ClientLayoutWrapper"
 
-// الخطوط
 const notoNaskhArabic = Noto_Naskh_Arabic({
   subsets: ["arabic"],
   weight: ["400", "500", "600", "700"],
@@ -55,11 +56,12 @@ export default function RootLayout({
         }}
       >
         <ToastProvider>
-            <ToastListener />
-              <ToastDisplay />
-          {children}
-          <ToastViewport className="fixed top-4 right-4 z-[99999] max-w-sm" />
+          <ToastListener />
+          <ToastDisplay />
 
+          <ClientLayoutWrapper>{children}</ClientLayoutWrapper>
+
+          <ToastViewport className="fixed top-4 right-4 z-[99999] max-w-sm" />
         </ToastProvider>
       </body>
     </html>

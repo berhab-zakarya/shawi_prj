@@ -1,16 +1,18 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import HeroSectionTextHover from "@/components/animata/hero/hero-section-text-hover"
-import { Mail, Phone, MapPin, MessageCircle, Send, Clock, Shield, CheckCircle } from 'lucide-react'
+import { Mail, Phone, MapPin, MessageCircle, Send, Clock, Shield, CheckCircle } from "lucide-react"
 
 const ContactSection = () => {
   const [isVisible, setIsVisible] = useState(false)
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    message: ''
+    firstName: "",
+    lastName: "",
+    email: "",
+    message: "",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -33,16 +35,35 @@ const ContactSection = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
-    // Simulate form submission
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    setIsSubmitting(false)
-    // Reset form or show success message
+
+    // Create mailto link
+    const subject = encodeURIComponent(`رسالة من ${formData.firstName} ${formData.lastName}`)
+    const body = encodeURIComponent(`
+الاسم: ${formData.firstName} ${formData.lastName}
+البريد الإلكتروني: ${formData.email}
+
+الرسالة:
+${formData.message}
+    `)
+
+    window.location.href = `mailto:info@elshawi-law.ae?subject=${subject}&body=${body}`
+
+    setTimeout(() => {
+      setIsSubmitting(false)
+      // Reset form
+      setFormData({
+        firstName: "",
+        lastName: "",
+        email: "",
+        message: "",
+      })
+    }, 1000)
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     }))
   }
 
@@ -53,7 +74,7 @@ const ContactSection = () => {
       description: "فريقنا الودود هنا لمساعدتكم",
       contact: "info@elshawi-law.ae",
       color: "blue",
-      action: "mailto:info@elshawi-law.ae"
+      action: "mailto:info@elshawi-law.ae",
     },
     {
       icon: Phone,
@@ -61,7 +82,7 @@ const ContactSection = () => {
       description: "من الإثنين إلى الجمعة من 8 صباحاً إلى 5 مساءً",
       contact: "+971 50 123 4567",
       color: "green",
-      action: "tel:+971501234567"
+      action: "tel:+971501234567",
     },
     {
       icon: MapPin,
@@ -69,7 +90,7 @@ const ContactSection = () => {
       description: "تعال وقم بزيارتنا في مقرنا",
       contact: "دبي، الإمارات العربية المتحدة",
       color: "purple",
-      action: "#"
+      action: "#",
     },
     {
       icon: MessageCircle,
@@ -77,7 +98,7 @@ const ContactSection = () => {
       description: "فريقنا الودود هنا لمساعدتكم",
       contact: "بدء دردشة جديدة",
       color: "orange",
-      action: "#"
+      action: "#",
     },
   ]
 
@@ -91,12 +112,12 @@ const ContactSection = () => {
   return (
     <section id="contact-section" className="bg-white py-8 md:py-12 dark:bg-gray-900" lang="ar" dir="rtl">
       <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Enhanced Header */}
+        {/* Header */}
         <div className="text-center mb-16">
           <div
             className={`transition-all duration-700 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
           >
-            <div className="inline-flex items-center gap-2 bg-teal-50 text-teal-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 bg-[#D4AF37]/10 text-[#D4AF37] px-4 py-2 rounded-full text-sm font-medium mb-6">
               <MessageCircle className="w-4 h-4" />
               تواصل معنا
             </div>
@@ -108,7 +129,7 @@ const ContactSection = () => {
         </div>
 
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
-          {/* Enhanced Contact Methods */}
+          {/* Contact Methods */}
           <div className="space-y-8">
             <div
               className={`transition-all duration-700 ease-out delay-200 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
@@ -132,15 +153,13 @@ const ContactSection = () => {
                       >
                         <method.icon className="w-7 h-7" />
                       </div>
-                      
+
                       <div className="space-y-2">
-                        <h4 className="text-lg font-semibold text-gray-900 group-hover:text-amber-600 transition-colors duration-300">
+                        <h4 className="text-lg font-semibold text-gray-900 group-hover:text-[#D4AF37] transition-colors duration-300">
                           {method.title}
                         </h4>
                         <p className="text-sm text-gray-600">{method.description}</p>
-                        <p className="text-sm font-medium text-amber-600 group-hover:underline">
-                          {method.contact}
-                        </p>
+                        <p className="text-sm font-medium text-[#D4AF37] group-hover:underline">{method.contact}</p>
                       </div>
                     </div>
                   </a>
@@ -172,7 +191,7 @@ const ContactSection = () => {
             </div>
           </div>
 
-          {/* Enhanced Contact Form */}
+          {/* Contact Form */}
           <div
             className={`transition-all duration-700 ease-out delay-300 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
           >
@@ -192,7 +211,7 @@ const ContactSection = () => {
                       value={formData.firstName}
                       onChange={handleInputChange}
                       placeholder="محمد"
-                      className="block w-full px-4 py-3 text-gray-700 placeholder-gray-400 bg-gray-50 border border-gray-200 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none transition-all duration-300"
+                      className="block w-full px-4 py-3 text-gray-700 placeholder-gray-400 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]/40 focus:outline-none transition-all duration-300"
                       required
                     />
                   </div>
@@ -205,7 +224,7 @@ const ContactSection = () => {
                       value={formData.lastName}
                       onChange={handleInputChange}
                       placeholder="السعيد"
-                      className="block w-full px-4 py-3 text-gray-700 placeholder-gray-400 bg-gray-50 border border-gray-200 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none transition-all duration-300"
+                      className="block w-full px-4 py-3 text-gray-700 placeholder-gray-400 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]/40 focus:outline-none transition-all duration-300"
                       required
                     />
                   </div>
@@ -219,7 +238,7 @@ const ContactSection = () => {
                     value={formData.email}
                     onChange={handleInputChange}
                     placeholder="mohammed@example.com"
-                    className="block w-full px-4 py-3 text-gray-700 placeholder-gray-400 bg-gray-50 border border-gray-200 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none transition-all duration-300"
+                    className="block w-full px-4 py-3 text-gray-700 placeholder-gray-400 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]/40 focus:outline-none transition-all duration-300"
                     required
                   />
                 </div>
@@ -232,7 +251,7 @@ const ContactSection = () => {
                     onChange={handleInputChange}
                     rows={5}
                     placeholder="اكتب رسالتك هنا..."
-                    className="block w-full px-4 py-3 text-gray-700 placeholder-gray-400 bg-gray-50 border border-gray-200 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-200 focus:outline-none transition-all duration-300 resize-none"
+                    className="block w-full px-4 py-3 text-gray-700 placeholder-gray-400 bg-gray-50 border border-gray-200 rounded-xl focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]/40 focus:outline-none transition-all duration-300 resize-none"
                     required
                   />
                 </div>
@@ -240,7 +259,7 @@ const ContactSection = () => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-4 rounded-xl font-semibold text-lg hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-3"
+                  className="w-full bg-gradient-to-r from-[#D4AF37] to-[#B8941F] text-white px-6 py-4 rounded-xl font-semibold text-lg hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-3"
                 >
                   {isSubmitting ? (
                     <>
@@ -259,8 +278,10 @@ const ContactSection = () => {
               {/* Form Footer */}
               <div className="mt-6 text-center">
                 <p className="text-xs text-gray-500">
-                  بإرسال هذا النموذج، فإنك توافق على 
-                  <a href="#" className="text-amber-600 hover:underline mx-1">سياسة الخصوصية</a>
+                  بإرسال هذا النموذج، فإنك توافق على
+                  <a href="#" className="text-[#D4AF37] hover:underline mx-1">
+                    سياسة الخصوصية
+                  </a>
                   الخاصة بنا
                 </p>
               </div>

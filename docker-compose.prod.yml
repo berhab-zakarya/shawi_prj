@@ -109,10 +109,10 @@ services:
 
   celery_beat:
     image: elshawi/backend:latest
-    command: ["celery", "-A", "elshawi_backend", "beat", "--loglevel=info", "--pidfile=/tmp/celerybeat.pid", "--schedule=/app/beat-schedule/celerybeat-schedule"]
+    command: ["celery", "-A", "elshawi_backend", "beat", "--loglevel=info", "--pidfile=/tmp/celerybeat.pid"]
     volumes:
       - ./logs:/app/logs
-      - ./celery-beat-schedule:/app/beat-schedule
+      - celery_beat_data:/app/beat-schedule
     env_file:
       - .env.prod
     depends_on:
@@ -176,6 +176,7 @@ volumes:
   postgres_data:
   redis_data:
   staticfiles_data:
+  celery_beat_data:
 
 networks:
   app-network:

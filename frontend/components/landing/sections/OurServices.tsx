@@ -1,13 +1,13 @@
-/* eslint-disable */
-
 "use client"
 
 import HeroSectionTextHover from "@/components/animata/hero/hero-section-text-hover"
 import { useId, useState, useEffect } from "react"
 import { Building, Home, Shield, Users, FileText, Briefcase, ArrowRight } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 export function OurServices() {
   const [isVisible, setIsVisible] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -28,12 +28,12 @@ export function OurServices() {
   return (
     <div id="services-section" className="pt-8 md:pt-16 lg:pt-32" dir="rtl">
       <div className="max-w-7xl mx-auto">
-        {/* Enhanced Header */}
+        {/* Header */}
         <div className="text-center mb-16">
           <div
             className={`transition-all duration-1000 ease-out ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}
           >
-            <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-2 bg-[#D4AF37]/10 text-[#D4AF37] px-4 py-2 rounded-full text-sm font-medium mb-6">
               <Briefcase className="w-4 h-4" />
               خدمات متكاملة
             </div>
@@ -49,7 +49,7 @@ export function OurServices() {
           </div>
         </div>
 
-        {/* Enhanced Services Grid */}
+        {/* Services Grid */}
         <div className="grid grid-cols-12 gap-6 md:gap-8">
           {enhancedLegalServices.map((service, index) => (
             <div key={service.title} className="col-span-12 sm:col-span-6 lg:col-span-4">
@@ -99,6 +99,16 @@ export function OurServices() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* CTA Section */}
+        <div className="text-center mt-16">
+          <button
+            onClick={() => router.push("/auth")}
+            className="bg-gradient-to-r from-[#D4AF37] to-[#B8941F] text-white px-8 py-4 rounded-xl font-semibold text-lg hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1"
+          >
+            استكشف جميع خدماتنا
+          </button>
         </div>
       </div>
     </div>

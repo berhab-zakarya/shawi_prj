@@ -68,7 +68,18 @@ function getDashboardPath(role: string): string {
 // IMPORTANT: This config must be exported from middleware.ts, not next.config.ts
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|blog.*|$).*)',
+    /**
+     * Apply middleware to all routes except:
+     * - / (homepage)
+     * - /auth and /login
+     * - /blog and subroutes
+     * - /services
+     * - /library
+     * - /airag
+     * - Static files
+     * - API routes
+     * - Next.js internals (_next/*)
+     */
+    '/((?!api/|_next/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|blog.*|services|library|airag|auth|login|$).*)',
   ],
 }
-

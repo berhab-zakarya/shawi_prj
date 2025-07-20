@@ -1,13 +1,13 @@
-/* eslint-disable */
-
+"use client"
 import HeroSectionTextHover from "@/components/animata/hero/hero-section-text-hover"
 import { Check } from "lucide-react"
+import Link from "next/link"
 
 const tiers = [
   {
     name: "تحليل مذكرة",
     id: "tier-memo-analysis",
-    href: "#",
+    href: "/auth",
     price: "99 درهم",
     description: "تحليل فوري ومفصل للمستندات القانونية",
     features: ["تحليل فوري للمستند", "استخراج الوقائع والطلبات", "تقرير PDF قابل للتنزيل", "دعم فني على مدار الساعة"],
@@ -16,7 +16,7 @@ const tiers = [
   {
     name: "الخطة الذهبية",
     id: "tier-gold",
-    href: "#",
+    href: "/auth",
     price: "499 درهم",
     period: "/شهرياً",
     description: "الحل الأمثل للمحامين والمكاتب القانونية",
@@ -33,7 +33,7 @@ const tiers = [
   {
     name: "استشارة خاصة",
     id: "tier-consultation",
-    href: "#",
+    href: "/auth",
     price: "249 درهم",
     description: "جلسة استشارية مخصصة مع خبير قانوني",
     features: ["جلسة 30 دقيقة مع محامٍ", "سرية تامة ومضمونة", "خطة عمل مبدئية للقضية", "متابعة لمدة أسبوع"],
@@ -79,7 +79,7 @@ export default function Pricing() {
             style={
               tier.featured
                 ? {
-                    background: "linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(212, 175, 55, 0.05) 100%)",
+                    background: "linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(184, 148, 31, 0.05) 100%)",
                     borderColor: "#D4AF37",
                   }
                 : {}
@@ -143,7 +143,7 @@ export default function Pricing() {
               ))}
             </ul>
 
-            <a
+            <Link
               href={tier.href}
               aria-describedby={tier.id}
               className={classNames(
@@ -162,7 +162,7 @@ export default function Pricing() {
               }
             >
               ابدأ الآن
-            </a>
+            </Link>
           </div>
         ))}
       </div>
