@@ -135,6 +135,8 @@ services:
       - app-network
     environment:
       - NODE_ENV=production
+    env_file:
+      - .env.prod
 
   nginx:
     image: nginx:alpine

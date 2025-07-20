@@ -1,74 +1,37 @@
-name: 🚀 Deploy Frontend Only (Ultra Fast)
+name: 🚀 Deploy Frontend Only (Next.js)
 
 on:
   push:
-    branches:
-      - master
     paths:
       - 'frontend/**'
-      - '.github/workflows/deploy.yml' # Trigger on workflow update
+    branches:
+      - master
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: ⬇️ Checkout code
+        uses: actions/checkout@v3
 
-      - name: Add SSH key
+      - name: 🐳 Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Load environment variables
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 31.97.182.92 >> ~/.ssh/known_hosts
+          echo "✅ Loading production environment..."
+          echo "${{ secrets.ENV_PROD }}" > .env.prod
 
-      - name: Deploy Frontend to Hostinger
+      - name: 🏗️ Build frontend only
         run: |
-          ssh -o StrictHostKeyChecking=no root@31.97.182.92 << 'EOF'
-            set -e
+          echo "🛠️ Building frontend..."
+          docker-compose -f docker-compose.prod.yml build frontend
 
-            echo "🚀 Starting ultra-fast frontend deployment..."
-
-            REPO_DIR="/opt/elshawi_platform/shawi_prj"
-
-            if [ ! -d "$REPO_DIR" ]; then
-              echo "📂 Cloning project..."
-              mkdir -p /opt/elshawi_platform
-              cd /opt/elshawi_platform
-              git clone --depth 1 https://github.com/berhab-zakarya/shawi_prj.git shawi_prj
-            else
-              echo "🔄 Updating repo..."
-              cd "$REPO_DIR"
-              git fetch origin master --depth 1
-              git reset --hard origin/master
-            fi
-
-            cd "$REPO_DIR"
-
-            if [ ! -f .env.prod ]; then
-              echo "❌ .env.prod not found! Deployment aborted."
-              exit 1
-            fi
-
-            echo "🔨 Building frontend only..."
-            docker-compose -f docker-compose.prod.yml build frontend
-
-            echo "🚀 Replacing frontend container..."
-            docker-compose -f docker-compose.prod.yml up -d --no-deps --build frontend
-
-            echo "🧹 Cleaning up unused Docker images..."
-            (docker image prune -f --filter "dangling=true" &) || true
-
-            echo "✅ Frontend deployment completed!"
-          EOF
-
-      - name: Quick Service Check
+      - name: 🚀 Deploy frontend only
         run: |
-          ssh -o StrictHostKeyChecking=no root@31.97.182.92 << 'EOF'
-            cd /opt/elshawi_platform/shawi_prj
-            docker-compose -f docker-compose.prod.yml ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
-          EOF
+          echo "📦 Recreating frontend container..."
+          docker-compose -f docker-compose.prod.yml up -d --no-deps --build frontend
 
 # name: 🔁 Reload Nginx Config
 
