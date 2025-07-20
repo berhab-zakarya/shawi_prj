@@ -1,4 +1,4 @@
-export const API_BASE_URL = "eilflawyers.com/api/api/v1/"
+export const API_BASE_URL = "https://eilflawyers.com/api/api/v1/"
 export const REFRESH_TOKEN_ENDPOINT = `${API_BASE_URL}token/refresh/`;
 export const LOGIN_ENDPOINT = `${API_BASE_URL}auth/login/`;
 export const REGISTER_ENDPOINT = `${API_BASE_URL}auth/register/`;
@@ -48,7 +48,7 @@ export const REQUEST_SERVICE_ENDPOINT = "/marketplace/requests/create/"
 
 
 export const AI_ASSISTANT_BASE_URL = "ai-assistant/";
-export const WS_BASE_URL = "ws://localhost:8001/ws/ai-assistant/";
+export const WS_BASE_URL = "wss://eilflawyers.com/ws/ai-assistant/";
 
 // AI Assistant endpoints
 export const AI_RESPONSES_ENDPOINT = `${AI_ASSISTANT_BASE_URL}responses/`;
