@@ -71,6 +71,11 @@ services:
     restart: unless-stopped
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   celery_worker:
     build:
@@ -130,6 +135,7 @@ services:
     depends_on:
       - backend
       - frontend
+      - daphne
     restart: unless-stopped
     networks:
       - app-network
