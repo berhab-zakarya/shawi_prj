@@ -263,7 +263,7 @@ const startEditUser = (user: User) => {
 }
 
   return (
-    <div className="min-h-screen bg-background" dir="rtl">
+    <div className="min-h-screen " dir="rtl">
       <div className="container mx-auto p-4 space-y-4">
         {/* Header */}
         <div className="bg-primary text-primary-foreground rounded-lg p-6 shadow-lg">

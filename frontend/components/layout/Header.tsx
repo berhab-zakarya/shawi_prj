@@ -7,12 +7,13 @@ import { useRouter } from "next/navigation";
 
 const navLinks = [
     ["الرئيسية", "/"],
-    ["من نحن", "/about"],
-    ["المحامي الذكي", "/lawyer-ai"],
-    ["خدماتنا", "/services"],
-    ["المكتبة الذكية", "/library"],
-    ["المدونة", "/blog"],
-    ["تواصل معنا", "/contact"],
+    ["من نحن", "#about"],
+    ["المحامي الذكي", "#lawyer-ai"],
+        ["المكتبة الذكية", "#library"],
+    ["خدماتنا", "#services"],
+    ["المدونة", "#blog"],
+    ["أسعارنا", "#pricing"],
+    ["تواصل معنا", "#contact"],
 ];
 
 export default function Header() {

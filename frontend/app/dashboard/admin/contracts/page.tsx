@@ -453,7 +453,7 @@ export default function ContractsAdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6" dir="rtl">
+    <div className="min-h-screen   p-6" dir="rtl">
       <div className="max-w-7xl mx-auto space-y-6">{renderContent()}</div>
     </div>
   )
@@ -793,7 +793,7 @@ function ContractDetailView({
   return (
     <>
       {/* Enhanced Header */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
+      <div className=" rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Button variant="outline" onClick={onBack} className="hover:bg-slate-50 bg-transparent">

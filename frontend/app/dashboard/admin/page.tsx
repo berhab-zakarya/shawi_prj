@@ -127,7 +127,7 @@ export default function AdminDashboard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6" dir="rtl">
+      <div className="min-h-screen p-6" dir="rtl">
         <div className="flex items-center justify-center min-h-96">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />

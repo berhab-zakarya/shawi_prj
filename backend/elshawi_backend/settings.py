@@ -6,7 +6,7 @@ from datetime import timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Environment variables with fallback values
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-fallback-key-change-in-production')
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-$_q)*y(1q3=%oq9&$uzlp%7awjpki-puni*xnmil(ad#5@et+g')
 DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'
 
 # Database configuration from environment variables

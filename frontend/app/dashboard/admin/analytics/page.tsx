@@ -80,7 +80,7 @@ export default function AdminAnalyticsPage() {
 
   if (loading && !analytics) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6" dir="rtl">
+      <div className="min-h-screen  p-6" dir="rtl">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center h-64">
             <div className="flex items-center gap-2">
@@ -95,7 +95,7 @@ export default function AdminAnalyticsPage() {
 
   if (errorMessage) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6" dir="rtl">
+      <div className="min-h-screen  p-6" dir="rtl">
         <div className="max-w-7xl mx-auto">
           <Card className="border-red-200 bg-red-50">
             <CardContent className="p-6">
@@ -115,7 +115,7 @@ export default function AdminAnalyticsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6" dir="rtl">
+    <div className="min-h-screen  p-6" dir="rtl">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">

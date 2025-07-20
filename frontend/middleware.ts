@@ -29,7 +29,7 @@ console.log('[middleware] Access Token:', accessToken)
     if (
       (pathname.startsWith('/dashboard/client') && userRole !== 'Client') ||
       (pathname.startsWith('/dashboard/lawyer') && userRole !== 'Lawyer') ||
-      (pathname.startsWith('/admin') && userRole !== 'Admin')
+      (pathname.startsWith('/dashboard/admin') && userRole !== 'Admin')
     ) {
       return redirectToDashboard(userRole, request)
     }

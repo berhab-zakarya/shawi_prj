@@ -60,7 +60,7 @@ const navigationConfig = {
     { title: "لوحة التحليلات", url: "/dashboard/admin/analytics", icon: BarChart3 },
     { title: "مراقبة السوق", url: "/dashboard/admin/marketplace", icon: ShoppingCart },
     { title: "الإشراف على العقود", url: "/dashboard/admin/contracts", icon: FileCheck },
-    { title: "المكتبة القانونية", url: "/dashboard/admin/library", icon: BookOpen },
+    // { title: "المكتبة القانونية", url: "/dashboard/admin/library", icon: BookOpen },
     { title: "المدونة", url: "/dashboard/admin/blog", icon: Brain },
   ],
 }

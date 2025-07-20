@@ -20,7 +20,7 @@ export default function Home() {
     <div className="relative min-h-screen overflow-hidden">
       {/* Fixed Global Background Layer - Lowest z-index */}
       <div className="fixed inset-0 z-0">
-        <GridLayout />
+        <GridLayout  />
         <div className="absolute inset-0 bg-gradient-to-b from-white/80 via-transparent to-white/60" />
       </div>
 
@@ -34,7 +34,7 @@ export default function Home() {
         {/* Main Content Grid */}
         <main className="relative z-20">
           {/* Hero Section - Full viewport with optimized background */}
-          <section className="relative min-h-screen flex items-center overflow-hidden">
+          <section id="#about" className="relative min-h-screen flex items-center overflow-hidden">
             <div className="absolute inset-0 z-0">
               <Image src="/bg_hero.svg" alt="" fill className="object-cover opacity-60" priority quality={85} />
               <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/10 to-white/30" />
@@ -51,7 +51,7 @@ export default function Home() {
           </section>
 
           {/* AI Rag Section */}
-          <section className="relative">
+          <section id="#lawyer-ai" className="relative">
             <SectionWithBackground
               imageSrc="/bg_hero.svg"
               imageClassName="opacity-20 object-cover"
@@ -68,7 +68,7 @@ export default function Home() {
           </section>
 
           {/* Library Section */}
-          <section className="relative bg-slate-50/30">
+          <section id="#library" className="relative bg-slate-50/30">
             <SectionWithBackground
               imageSrc="/bg_hero.svg"
               imageClassName="opacity-15 object-cover"
@@ -85,7 +85,7 @@ export default function Home() {
           </section>
 
           {/* Services Section */}
-          <section className="relative">
+          <section id="#services" className="relative">
             <SectionWithBackground
               imageSrc="/bg_hero.svg"
               imageClassName="opacity-25 object-cover"
@@ -102,7 +102,7 @@ export default function Home() {
           </section>
 
           {/* Blog Section */}
-          <section className="relative  bg-slate-50/30">
+          <section id="#blog" className="relative  bg-slate-50/30">
             <SectionWithBackground
               imageSrc="/bg_hero.svg"
               imageClassName="opacity-20 object-cover"
@@ -119,7 +119,7 @@ export default function Home() {
           </section>
 
           {/* Pricing Section */}
-          <section className="relative">
+          <section id="#pricing" className="relative">
             <SectionWithBackground
               imageSrc="/bg_hero.svg"
               imageClassName="opacity-15 object-cover"
