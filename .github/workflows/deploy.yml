@@ -27,25 +27,43 @@ env:
   REGISTRY: ${{ secrets.ACR_REGISTRY }}
   BACKEND_IMAGE_NAME: elshawi-backend
   FRONTEND_IMAGE_NAME: elshawi-frontend
+  AZURE_API_BASE: https://management.azure.com
 
 jobs:
-  azure-login:
+  azure-setup:
     runs-on: ubuntu-latest
+    outputs:
+      auth-verified: ${{ steps.verify-auth.outputs.verified }}
     steps:
-    - name: Azure Login using token
+    - name: Verify Azure Access Token
+      id: verify-auth
+      env:
+        AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
-        echo "🔐 Authenticating with Azure..."
-        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+        echo "🔐 Verifying Azure access token..."
         
-        # Verify authentication
-        echo "✅ Azure authentication successful"
-        az account show --output table
+        # Test the access token with subscription info
+        HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/sub_response.json \
+          -H "Authorization: Bearer ${AZURE_ACCESS_TOKEN}" \
+          -H "Content-Type: application/json" \
+          "${AZURE_API_BASE}/subscriptions/${AZURE_SUBSCRIPTION_ID}?api-version=2020-01-01")
         
-        # Set subscription if needed
-        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        if [ "$HTTP_CODE" = "200" ]; then
+          echo "✅ Access token is valid"
+          SUB_NAME=$(cat /tmp/sub_response.json | jq -r '.displayName')
+          echo "📋 Subscription: $SUB_NAME"
+          echo "verified=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Access token validation failed with HTTP code: $HTTP_CODE"
+          cat /tmp/sub_response.json
+          echo "verified=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
 
   detect-changes:
-    needs: azure-login
+    needs: azure-setup
     runs-on: ubuntu-latest
     outputs:
       backend-changed: ${{ steps.changes.outputs.backend }}
@@ -56,15 +74,10 @@ jobs:
       deploy-component: ${{ github.event.inputs.component || 'all' }}
     
     steps:
-    - name: Azure Login using token
-      run: |
-        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
-        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Fetch full history for better change detection
+        fetch-depth: 0
 
     - name: Detect file changes
       uses: dorny/paths-filter@v2
@@ -102,7 +115,7 @@ jobs:
         echo "=================================="
 
   build-backend:
-    needs: [azure-login, detect-changes]
+    needs: [azure-setup, detect-changes]
     runs-on: ubuntu-latest
     if: |
       needs.detect-changes.outputs.backend-changed == 'true' || 
@@ -111,11 +124,6 @@ jobs:
       (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'backend')
     
     steps:
-    - name: Azure Login using token
-      run: |
-        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
-        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
     - name: Checkout code
       uses: actions/checkout@v4
 
@@ -143,7 +151,7 @@ jobs:
         platforms: linux/amd64
 
   build-frontend:
-    needs: [azure-login, detect-changes]
+    needs: [azure-setup, detect-changes]
     runs-on: ubuntu-latest
     if: |
       needs.detect-changes.outputs.frontend-changed == 'true' || 
@@ -152,11 +160,6 @@ jobs:
       (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'frontend')
     
     steps:
-    - name: Azure Login using token
-      run: |
-        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
-        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
     - name: Checkout code
       uses: actions/checkout@v4
 
@@ -184,7 +187,7 @@ jobs:
         platforms: linux/amd64
 
   deploy:
-    needs: [azure-login, detect-changes, build-backend, build-frontend]
+    needs: [azure-setup, detect-changes, build-backend, build-frontend]
     runs-on: ubuntu-latest
     if: always() && !cancelled() && !failure()
     
@@ -192,22 +195,105 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Azure Login using token
+    - name: Setup Azure REST API Helper Functions
+      env:
+        AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
-        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
-        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        echo "🔧 Setting up Azure REST API helper functions..."
+        
+        # Create helper functions for Azure REST API calls
+        cat > azure_rest_helper.sh << 'EOF'
+        #!/bin/bash
+        
+        # Azure REST API helper functions
+        AZURE_TOKEN="${AZURE_ACCESS_TOKEN}"
+        SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID}"
+        RESOURCE_GROUP="${AZURE_RESOURCE_GROUP}"
+        API_BASE="https://management.azure.com"
+        
+        # Function to make authenticated REST API calls
+        azure_api_call() {
+          local method="$1"
+          local url="$2"
+          local data="$3"
+          
+          if [ -n "$data" ]; then
+            curl -s -X "$method" \
+              -H "Authorization: Bearer $AZURE_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$data" \
+              "$url"
+          else
+            curl -s -X "$method" \
+              -H "Authorization: Bearer $AZURE_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$url"
+          fi
+        }
+        
+        # Function to check if container instance exists
+        check_container_exists() {
+          local container_name="$1"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2021-09-01"
+          
+          local response=$(azure_api_call "GET" "$url")
+          echo "$response" | jq -r '.name // empty' 2>/dev/null
+        }
+        
+        # Function to delete container instance
+        delete_container() {
+          local container_name="$1"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2021-09-01"
+          
+          echo "🗑️ Deleting container: $container_name"
+          azure_api_call "DELETE" "$url"
+        }
+        
+        # Function to create container instance
+        create_container() {
+          local container_name="$1"
+          local container_spec="$2"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2021-09-01"
+          
+          echo "🚀 Creating container: $container_name"
+          azure_api_call "PUT" "$url" "$container_spec"
+        }
+        
+        # Function to get container status
+        get_container_status() {
+          local container_name="$1"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2021-09-01"
+          
+          local response=$(azure_api_call "GET" "$url")
+          echo "$response" | jq -r '.properties.instanceView.state // "Unknown"' 2>/dev/null
+        }
+        EOF
+        
+        chmod +x azure_rest_helper.sh
 
     - name: Check existing deployments
       id: check-deployments
+      env:
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
       run: |
+        source azure_rest_helper.sh
+        
+        echo "🔍 Checking existing deployments..."
+        
         # Check if containers already exist
-        BACKEND_EXISTS=$(az container show --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name elshawi-backend-${{ github.run_number }} --query "name" -o tsv 2>/dev/null || echo "")
-        FRONTEND_EXISTS=$(az container show --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name elshawi-frontend-${{ github.run_number }} --query "name" -o tsv 2>/dev/null || echo "")
-        REDIS_EXISTS=$(az container show --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name elshawi-redis-${{ github.run_number }} --query "name" -o tsv 2>/dev/null || echo "")
+        BACKEND_EXISTS=$(check_container_exists "elshawi-backend-${GITHUB_RUN_NUMBER}")
+        FRONTEND_EXISTS=$(check_container_exists "elshawi-frontend-${GITHUB_RUN_NUMBER}")
+        REDIS_EXISTS=$(check_container_exists "elshawi-redis-${GITHUB_RUN_NUMBER}")
         
         echo "backend-exists=${BACKEND_EXISTS}" >> $GITHUB_OUTPUT
         echo "frontend-exists=${FRONTEND_EXISTS}" >> $GITHUB_OUTPUT
         echo "redis-exists=${REDIS_EXISTS}" >> $GITHUB_OUTPUT
+        
+        echo "Backend exists: ${BACKEND_EXISTS:-none}"
+        echo "Frontend exists: ${FRONTEND_EXISTS:-none}"
+        echo "Redis exists: ${REDIS_EXISTS:-none}"
 
     - name: Deploy Redis (if needed)
       if: |
@@ -216,28 +302,58 @@ jobs:
          needs.detect-changes.outputs.force-deploy == 'true' ||
          needs.detect-changes.outputs.deploy-component == 'all' ||
          needs.detect-changes.outputs.deploy-component == 'redis')
+      env:
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
       run: |
+        source azure_rest_helper.sh
+        
         echo "🚀 Deploying Redis..."
-        az container create \
-          --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-          --name elshawi-redis-${{ github.run_number }} \
-          --image redis:7-alpine \
-          --dns-name-label elshawi-redis-${{ github.run_number }} \
-          --ports 6379 \
-          --command-line "redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru" \
-          --cpu 0.5 \
-          --memory 0.5 \
-          --location westeurope \
-          --restart-policy Always
-
-    - name: Wait for Redis to be ready
-      if: |
-        steps.check-deployments.outputs.redis-exists == '' &&
-        (needs.detect-changes.outputs.backend-changed == 'true' || 
-         needs.detect-changes.outputs.force-deploy == 'true' ||
-         needs.detect-changes.outputs.deploy-component == 'all' ||
-         needs.detect-changes.outputs.deploy-component == 'redis')
-      run: |
+        
+        # Redis container specification
+        REDIS_SPEC=$(cat << EOF
+        {
+          "location": "westeurope",
+          "properties": {
+            "containers": [
+              {
+                "name": "redis",
+                "properties": {
+                  "image": "redis:7-alpine",
+                  "command": ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"],
+                  "ports": [
+                    {
+                      "port": 6379,
+                      "protocol": "TCP"
+                    }
+                  ],
+                  "resources": {
+                    "requests": {
+                      "cpu": 0.5,
+                      "memoryInGB": 0.5
+                    }
+                  }
+                }
+              }
+            ],
+            "osType": "Linux",
+            "ipAddress": {
+              "type": "Public",
+              "ports": [
+                {
+                  "port": 6379,
+                  "protocol": "TCP"
+                }
+              ],
+              "dnsNameLabel": "elshawi-redis-${GITHUB_RUN_NUMBER}"
+            },
+            "restartPolicy": "Always"
+          }
+        }
+        EOF
+        )
+        
+        create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"
+        
         echo "⏳ Waiting for Redis to be ready..."
         sleep 30
 
@@ -246,88 +362,183 @@ jobs:
         needs.build-backend.result == 'success' ||
         (needs.detect-changes.outputs.force-deploy == 'true' && 
          (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'backend'))
+      env:
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        GITHUB_SHA: ${{ github.sha }}
+        REGISTRY: ${{ env.REGISTRY }}
+        BACKEND_IMAGE_NAME: ${{ env.BACKEND_IMAGE_NAME }}
+        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+        ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+        ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
       run: |
+        source azure_rest_helper.sh
+        
         echo "🚀 Deploying Backend..."
         
         # Delete existing container if it exists
         if [ "${{ steps.check-deployments.outputs.backend-exists }}" != "" ]; then
-          echo "🗑️ Removing existing backend container..."
-          az container delete --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name elshawi-backend-${{ github.run_number }} --yes --no-wait || true
+          delete_container "elshawi-backend-${GITHUB_RUN_NUMBER}"
           sleep 10
         fi
         
-        az container create \
-          --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-          --name elshawi-backend-${{ github.run_number }} \
-          --image ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }} \
-          --registry-login-server ${{ env.REGISTRY }} \
-          --registry-username ${{ secrets.ACR_USERNAME }} \
-          --registry-password ${{ secrets.ACR_PASSWORD }} \
-          --dns-name-label elshawi-backend-${{ github.run_number }} \
-          --ports 8000 \
-          --environment-variables \
-            DJANGO_SECRET_KEY="${{ secrets.DJANGO_SECRET_KEY }}" \
-            DJANGO_DEBUG="False" \
-            DJANGO_ALLOWED_HOSTS="elshawi-backend-${{ github.run_number }}.westeurope.azurecontainer.io,localhost" \
-            REDIS_URL="elshawi-redis-${{ github.run_number }}.westeurope.azurecontainer.io:6379" \
-            DATABASE_URL="sqlite:///db.sqlite3" \
-            CORS_ALLOWED_ORIGINS="https://elshawi-frontend-${{ github.run_number }}.westeurope.azurecontainer.io" \
-            GUNICORN_WORKERS="2" \
-            GUNICORN_TIMEOUT="30" \
-          --cpu 1 \
-          --memory 2 \
-          --location westeurope \
-          --restart-policy Always
+        # Backend container specification
+        BACKEND_SPEC=$(cat << EOF
+        {
+          "location": "westeurope",
+          "properties": {
+            "containers": [
+              {
+                "name": "backend",
+                "properties": {
+                  "image": "${REGISTRY}/${BACKEND_IMAGE_NAME}:${GITHUB_SHA}",
+                  "ports": [
+                    {
+                      "port": 8000,
+                      "protocol": "TCP"
+                    }
+                  ],
+                  "environmentVariables": [
+                    {"name": "DJANGO_SECRET_KEY", "value": "${DJANGO_SECRET_KEY}"},
+                    {"name": "DJANGO_DEBUG", "value": "False"},
+                    {"name": "DJANGO_ALLOWED_HOSTS", "value": "elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io,localhost"},
+                    {"name": "REDIS_URL", "value": "elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:6379"},
+                    {"name": "DATABASE_URL", "value": "sqlite:///db.sqlite3"},
+                    {"name": "CORS_ALLOWED_ORIGINS", "value": "https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io"},
+                    {"name": "GUNICORN_WORKERS", "value": "2"},
+                    {"name": "GUNICORN_TIMEOUT", "value": "30"}
+                  ],
+                  "resources": {
+                    "requests": {
+                      "cpu": 1,
+                      "memoryInGB": 2
+                    }
+                  }
+                }
+              }
+            ],
+            "imageRegistryCredentials": [
+              {
+                "server": "${REGISTRY}",
+                "username": "${ACR_USERNAME}",
+                "password": "${ACR_PASSWORD}"
+              }
+            ],
+            "osType": "Linux",
+            "ipAddress": {
+              "type": "Public",
+              "ports": [
+                {
+                  "port": 8000,
+                  "protocol": "TCP"
+                }
+              ],
+              "dnsNameLabel": "elshawi-backend-${GITHUB_RUN_NUMBER}"
+            },
+            "restartPolicy": "Always"
+          }
+        }
+        EOF
+        )
+        
+        create_container "elshawi-backend-${GITHUB_RUN_NUMBER}" "$BACKEND_SPEC"
 
     - name: Deploy Frontend
       if: |
         needs.build-frontend.result == 'success' ||
         (needs.detect-changes.outputs.force-deploy == 'true' && 
          (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'frontend'))
+      env:
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        GITHUB_SHA: ${{ github.sha }}
+        REGISTRY: ${{ env.REGISTRY }}
+        FRONTEND_IMAGE_NAME: ${{ env.FRONTEND_IMAGE_NAME }}
+        ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+        ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
       run: |
+        source azure_rest_helper.sh
+        
         echo "🚀 Deploying Frontend..."
         
         # Delete existing container if it exists
         if [ "${{ steps.check-deployments.outputs.frontend-exists }}" != "" ]; then
-          echo "🗑️ Removing existing frontend container..."
-          az container delete --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name elshawi-frontend-${{ github.run_number }} --yes --no-wait || true
+          delete_container "elshawi-frontend-${GITHUB_RUN_NUMBER}"
           sleep 10
         fi
         
-        az container create \
-          --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-          --name elshawi-frontend-${{ github.run_number }} \
-          --image ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }} \
-          --registry-login-server ${{ env.REGISTRY }} \
-          --registry-username ${{ secrets.ACR_USERNAME }} \
-          --registry-password ${{ secrets.ACR_PASSWORD }} \
-          --dns-name-label elshawi-frontend-${{ github.run_number }} \
-          --ports 3000 \
-          --environment-variables \
-            NEXT_PUBLIC_API_URL="https://elshawi-backend-${{ github.run_number }}.westeurope.azurecontainer.io:8000" \
-            NODE_ENV="production" \
-          --cpu 1 \
-          --memory 1.5 \
-          --location westeurope \
-          --restart-policy Always
+        # Frontend container specification
+        FRONTEND_SPEC=$(cat << EOF
+        {
+          "location": "westeurope",
+          "properties": {
+            "containers": [
+              {
+                "name": "frontend",
+                "properties": {
+                  "image": "${REGISTRY}/${FRONTEND_IMAGE_NAME}:${GITHUB_SHA}",
+                  "ports": [
+                    {
+                      "port": 3000,
+                      "protocol": "TCP"
+                    }
+                  ],
+                  "environmentVariables": [
+                    {"name": "NEXT_PUBLIC_API_URL", "value": "https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000"},
+                    {"name": "NODE_ENV", "value": "production"}
+                  ],
+                  "resources": {
+                    "requests": {
+                      "cpu": 1,
+                      "memoryInGB": 1.5
+                    }
+                  }
+                }
+              }
+            ],
+            "imageRegistryCredentials": [
+              {
+                "server": "${REGISTRY}",
+                "username": "${ACR_USERNAME}",
+                "password": "${ACR_PASSWORD}"
+              }
+            ],
+            "osType": "Linux",
+            "ipAddress": {
+              "type": "Public",
+              "ports": [
+                {
+                  "port": 3000,
+                  "protocol": "TCP"
+                }
+              ],
+              "dnsNameLabel": "elshawi-frontend-${GITHUB_RUN_NUMBER}"
+            },
+            "restartPolicy": "Always"
+          }
+        }
+        EOF
+        )
+        
+        create_container "elshawi-frontend-${GITHUB_RUN_NUMBER}" "$FRONTEND_SPEC"
 
     - name: Health Check
+      env:
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
       run: |
         echo "🏥 Performing health checks..."
         
         # Wait for containers to be running
-        sleep 30
+        sleep 45
         
         # Check backend health
         if [ "${{ needs.build-backend.result }}" == "success" ] || [ "${{ needs.detect-changes.outputs.force-deploy }}" == "true" ]; then
           echo "Checking backend health..."
-          for i in {1..5}; do
-            if curl -f -s "https://elshawi-backend-${{ github.run_number }}.westeurope.azurecontainer.io:8000/health/" > /dev/null 2>&1; then
+          for i in {1..8}; do
+            if curl -f -s --max-time 10 "https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000/health/" > /dev/null 2>&1; then
               echo "✅ Backend is healthy"
               break
             else
-              echo "⏳ Backend not ready yet, attempt $i/5"
-              sleep 10
+              echo "⏳ Backend not ready yet, attempt $i/8"
+              sleep 15
             fi
           done
         fi
@@ -335,18 +546,20 @@ jobs:
         # Check frontend health
         if [ "${{ needs.build-frontend.result }}" == "success" ] || [ "${{ needs.detect-changes.outputs.force-deploy }}" == "true" ]; then
           echo "Checking frontend health..."
-          for i in {1..5}; do
-            if curl -f -s "https://elshawi-frontend-${{ github.run_number }}.westeurope.azurecontainer.io:3000" > /dev/null 2>&1; then
+          for i in {1..8}; do
+            if curl -f -s --max-time 10 "https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000" > /dev/null 2>&1; then
               echo "✅ Frontend is healthy"
               break
             else
-              echo "⏳ Frontend not ready yet, attempt $i/5"
-              sleep 10
+              echo "⏳ Frontend not ready yet, attempt $i/8"
+              sleep 15
             fi
           done
         fi
 
     - name: Get deployment URLs
+      env:
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
       run: |
         echo "🚀 Deployment Complete!"
         echo "=================================="
@@ -357,60 +570,107 @@ jobs:
         echo "Force deploy: ${{ needs.detect-changes.outputs.force-deploy }}"
         echo "=================================="
         echo "🌐 Application URLs:"
-        echo "Backend API: https://elshawi-backend-${{ github.run_number }}.westeurope.azurecontainer.io:8000"
-        echo "Frontend App: https://elshawi-frontend-${{ github.run_number }}.westeurope.azurecontainer.io:3000"
-        echo "Admin Panel: https://elshawi-backend-${{ github.run_number }}.westeurope.azurecontainer.io:8000/admin/"
+        echo "Backend API: https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000"
+        echo "Frontend App: https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000"
+        echo "Admin Panel: https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000/admin/"
+        echo "Redis: elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:6379"
         echo "=================================="
 
   cleanup:
-    needs: [azure-login, deploy]
+    needs: [azure-setup, deploy]
     runs-on: ubuntu-latest
     if: always() && needs.deploy.result == 'success'
     
     steps:
-    - name: Azure Login using token
+    - name: Setup Azure REST API for Cleanup
+      env:
+        AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
-        echo "🔐 Setting up Azure authentication..."
-        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
-        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        # Create cleanup helper functions
+        cat > cleanup_helper.sh << 'EOF'
+        #!/bin/bash
         
-        # Verify authentication
-        echo "✅ Azure authentication successful for cleanup"
+        AZURE_TOKEN="${AZURE_ACCESS_TOKEN}"
+        SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID}"
+        RESOURCE_GROUP="${AZURE_RESOURCE_GROUP}"
+        API_BASE="https://management.azure.com"
+        
+        azure_api_call() {
+          local method="$1"
+          local url="$2"
+          
+          curl -s -X "$method" \
+            -H "Authorization: Bearer $AZURE_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$url"
+        }
+        
+        list_containers() {
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups?api-version=2021-09-01"
+          azure_api_call "GET" "$url" | jq -r '.value[].name' 2>/dev/null | grep "^elshawi-" || true
+        }
+        
+        delete_container() {
+          local container_name="$1"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2021-09-01"
+          azure_api_call "DELETE" "$url"
+        }
+        EOF
+        
+        chmod +x cleanup_helper.sh
 
     - name: Cleanup old deployments
+      env:
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
       run: |
+        source cleanup_helper.sh
+        
         echo "🧹 Cleaning up old deployments..."
         
-        # Get all containers with our prefix, excluding current deployment
-        ALL_CONTAINERS=$(az container list --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --query "[?starts_with(name, 'elshawi-')].name" -o tsv)
-        CURRENT_CONTAINERS="elshawi-backend-${{ github.run_number }} elshawi-frontend-${{ github.run_number }} elshawi-redis-${{ github.run_number }}"
+        # Get all containers with our prefix
+        ALL_CONTAINERS=$(list_containers)
+        CURRENT_CONTAINERS="elshawi-backend-${GITHUB_RUN_NUMBER}
+        elshawi-frontend-${GITHUB_RUN_NUMBER}
+        elshawi-redis-${GITHUB_RUN_NUMBER}"
         
-        # Keep last 2 deployments (6 containers total: 2 * (backend + frontend + redis))
-        OLD_CONTAINERS=$(echo "$ALL_CONTAINERS" | grep -v -E "($(echo $CURRENT_CONTAINERS | tr ' ' '|'))" | head -n -6 || true)
-        
-        if [ -n "$OLD_CONTAINERS" ]; then
-          echo "🗑️ Deleting old containers:"
-          echo "$OLD_CONTAINERS"
+        if [ -n "$ALL_CONTAINERS" ]; then
+          # Keep last 2 deployments (6 containers total)
+          OLD_CONTAINERS=$(echo "$ALL_CONTAINERS" | grep -v -F "$CURRENT_CONTAINERS" | head -n -6 || true)
           
-          for container in $OLD_CONTAINERS; do
-            echo "Deleting: $container"
-            az container delete --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name "$container" --yes --no-wait || true
-          done
+          if [ -n "$OLD_CONTAINERS" ]; then
+            echo "🗑️ Deleting old containers:"
+            echo "$OLD_CONTAINERS"
+            
+            for container in $OLD_CONTAINERS; do
+              echo "Deleting: $container"
+              delete_container "$container" &
+            done
+            
+            # Wait for all deletions to complete
+            wait
+            echo "✅ Cleanup completed"
+          else
+            echo "✨ No old containers to cleanup"
+          fi
         else
-          echo "✨ No old containers to cleanup"
+          echo "✨ No containers found for cleanup"
         fi
 
   notification:
-    needs: [azure-login, detect-changes, deploy]
+    needs: [azure-setup, detect-changes, deploy]
     runs-on: ubuntu-latest
     if: always()
     
     steps:
     - name: Deployment Status Summary
+      env:
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
       run: |
         echo "📋 Final Deployment Status"
         echo "=================================="
-        echo "Azure Login: ${{ needs.azure-login.result }}"
+        echo "Azure Setup: ${{ needs.azure-setup.result }}"
         echo "Change Detection: ${{ needs.detect-changes.result }}"
         echo "Deployment: ${{ needs.deploy.result }}"
         echo "Backend Changed: ${{ needs.detect-changes.outputs.backend-changed }}"
@@ -420,6 +680,8 @@ jobs:
         
         if [ "${{ needs.deploy.result }}" == "success" ]; then
           echo "✅ Deployment completed successfully!"
+          echo "🌐 Your app is live at:"
+          echo "Frontend: https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000"
         elif [ "${{ needs.deploy.result }}" == "skipped" ]; then
           echo "⏭️ Deployment was skipped (no changes detected)"
         else
