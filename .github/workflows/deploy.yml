@@ -29,7 +29,23 @@ env:
   FRONTEND_IMAGE_NAME: elshawi-frontend
 
 jobs:
+  azure-login:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Azure Login using token
+      run: |
+        echo "🔐 Authenticating with Azure..."
+        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+        
+        # Verify authentication
+        echo "✅ Azure authentication successful"
+        az account show --output table
+        
+        # Set subscription if needed
+        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
   detect-changes:
+    needs: azure-login
     runs-on: ubuntu-latest
     outputs:
       backend-changed: ${{ steps.changes.outputs.backend }}
@@ -40,6 +56,11 @@ jobs:
       deploy-component: ${{ github.event.inputs.component || 'all' }}
     
     steps:
+    - name: Azure Login using token
+      run: |
+        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
     - name: Checkout code
       uses: actions/checkout@v4
       with:
@@ -81,7 +102,7 @@ jobs:
         echo "=================================="
 
   build-backend:
-    needs: detect-changes
+    needs: [azure-login, detect-changes]
     runs-on: ubuntu-latest
     if: |
       needs.detect-changes.outputs.backend-changed == 'true' || 
@@ -90,6 +111,11 @@ jobs:
       (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'backend')
     
     steps:
+    - name: Azure Login using token
+      run: |
+        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
     - name: Checkout code
       uses: actions/checkout@v4
 
@@ -117,7 +143,7 @@ jobs:
         platforms: linux/amd64
 
   build-frontend:
-    needs: detect-changes
+    needs: [azure-login, detect-changes]
     runs-on: ubuntu-latest
     if: |
       needs.detect-changes.outputs.frontend-changed == 'true' || 
@@ -126,6 +152,11 @@ jobs:
       (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'frontend')
     
     steps:
+    - name: Azure Login using token
+      run: |
+        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
     - name: Checkout code
       uses: actions/checkout@v4
 
@@ -153,7 +184,7 @@ jobs:
         platforms: linux/amd64
 
   deploy:
-    needs: [detect-changes, build-backend, build-frontend]
+    needs: [azure-login, detect-changes, build-backend, build-frontend]
     runs-on: ubuntu-latest
     if: always() && !cancelled() && !failure()
     
@@ -164,6 +195,7 @@ jobs:
     - name: Azure Login using token
       run: |
         az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
     - name: Check existing deployments
       id: check-deployments
@@ -331,33 +363,19 @@ jobs:
         echo "=================================="
 
   cleanup:
-    needs: [deploy]
+    needs: [azure-login, deploy]
     runs-on: ubuntu-latest
     if: always() && needs.deploy.result == 'success'
     
     steps:
-    - name: Setup Azure authentication with access token
+    - name: Azure Login using token
       run: |
         echo "🔐 Setting up Azure authentication..."
+        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         
-        # Method 1: Try setting environment variable for Azure CLI
-        export AZURE_ACCESS_TOKEN="${{ secrets.AZURE_ACCESS_TOKEN }}"
-        export AZURE_SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-        
-        # Method 2: Alternative - use direct REST API calls
-        # Test the token validity
-        TOKEN_RESPONSE=$(curl -s -X GET \
-          -H "Authorization: Bearer ${{ secrets.AZURE_ACCESS_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}?api-version=2020-01-01")
-        
-        if echo "$TOKEN_RESPONSE" | grep -q "subscriptionId"; then
-          echo "✅ Access token is valid"
-        else
-          echo "❌ Access token validation failed"
-          echo "$TOKEN_RESPONSE"
-          exit 1
-        fi
+        # Verify authentication
+        echo "✅ Azure authentication successful for cleanup"
 
     - name: Cleanup old deployments
       run: |
@@ -383,7 +401,7 @@ jobs:
         fi
 
   notification:
-    needs: [detect-changes, deploy]
+    needs: [azure-login, detect-changes, deploy]
     runs-on: ubuntu-latest
     if: always()
     
@@ -392,6 +410,7 @@ jobs:
       run: |
         echo "📋 Final Deployment Status"
         echo "=================================="
+        echo "Azure Login: ${{ needs.azure-login.result }}"
         echo "Change Detection: ${{ needs.detect-changes.result }}"
         echo "Deployment: ${{ needs.deploy.result }}"
         echo "Backend Changed: ${{ needs.detect-changes.outputs.backend-changed }}"
