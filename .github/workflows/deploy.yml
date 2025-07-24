@@ -42,72 +42,7 @@ jobs:
         AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
-        echo "🧹 Cleaning up old deployments..."
-        
-        # Get all containers with our prefix
-        ALL_CONTAINERS=$(list_containers)
-        CURRENT_CONTAINERS="elshawi-backend-${GITHUB_RUN_NUMBER}
-        elshawi-frontend-${GITHUB_RUN_NUMBER}
-        elshawi-redis-${GITHUB_RUN_NUMBER}"
-        
-        if [ -n "$ALL_CONTAINERS" ]; then
-          # Keep last 2 deployments (6 containers total)
-          OLD_CONTAINERS=$(echo "$ALL_CONTAINERS" | grep -v -F "$CURRENT_CONTAINERS" | head -n -6 || true)
-          
-          if [ -n "$OLD_CONTAINERS" ]; then
-            echo "🗑️ Deleting old containers:"
-            echo "$OLD_CONTAINERS"
-            
-            for container in $OLD_CONTAINERS; do
-              echo "Deleting: $container"
-              delete_container "$container" &
-            done
-            
-            # Wait for all deletions to complete
-            wait
-            echo "✅ Cleanup completed"
-          else
-            echo "✨ No old containers to cleanup"
-          fi
-        else
-          echo "✨ No containers found for cleanup"
-        fi
-
-  notification:
-    needs: [azure-setup, detect-changes, deploy]
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-    - name: Deployment Status Summary
-      env:
-        GITHUB_RUN_NUMBER: ${{ github.run_number }}
-      run: |
-        echo "📋 Final Deployment Status"
-        echo "=================================="
-        echo "Azure Setup: ${{ needs.azure-setup.result }}"
-        echo "Change Detection: ${{ needs.detect-changes.result }}"
-        echo "Deployment: ${{ needs.deploy.result }}"
-        echo "Backend Should Deploy: ${{ needs.detect-changes.outputs.should-deploy-backend }}"
-        echo "Frontend Should Deploy: ${{ needs.detect-changes.outputs.should-deploy-frontend }}"
-        echo "Redis Should Deploy: ${{ needs.detect-changes.outputs.should-deploy-redis }}"
-        echo "=================================="
-        
-        if [ "${{ needs.deploy.result }}" == "success" ]; then
-          echo "✅ Deployment completed successfully!"
-          echo "🌐 Your app should be live at:"
-          if [ "${{ needs.detect-changes.outputs.should-deploy-frontend }}" == "true" ]; then
-            echo "Frontend: https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000"
-          fi
-          if [ "${{ needs.detect-changes.outputs.should-deploy-backend }}" == "true" ]; then
-            echo "Backend: https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000"
-          fi
-        elif [ "${{ needs.deploy.result }}" == "skipped" ]; then
-          echo "⏭️ Deployment was skipped (no components needed deployment)"
-        else
-          echo "❌ Deployment failed or was cancelled"
-          exit 1
-        fi "🔐 Verifying Azure access token..."
+        echo "🔐 Verifying Azure access token..."
         
         # Test the access token with subscription info
         HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/sub_response.json \
@@ -137,9 +72,6 @@ jobs:
       workflow-changed: ${{ steps.changes.outputs.workflow }}
       force-deploy: ${{ github.event.inputs.force_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
       deploy-component: ${{ github.event.inputs.component || 'all' }}
-      should-deploy-backend: ${{ steps.deployment-logic.outputs.deploy-backend }}
-      should-deploy-frontend: ${{ steps.deployment-logic.outputs.deploy-frontend }}
-      should-deploy-redis: ${{ steps.deployment-logic.outputs.deploy-redis }}
     
     steps:
     - name: Checkout code
@@ -170,47 +102,6 @@ jobs:
           workflow:
             - '.github/workflows/**'
 
-    - name: Determine deployment logic
-      id: deployment-logic
-      env:
-        BACKEND_CHANGED: ${{ steps.changes.outputs.backend }}
-        FRONTEND_CHANGED: ${{ steps.changes.outputs.frontend }}
-        DOCKER_CHANGED: ${{ steps.changes.outputs.docker }}
-        FORCE_DEPLOY: ${{ github.event.inputs.force_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
-        DEPLOY_COMPONENT: ${{ github.event.inputs.component || 'all' }}
-      run: |
-        echo "🔍 Determining what to deploy..."
-        
-        # Backend deployment logic
-        if [[ "$BACKEND_CHANGED" == "true" || "$DOCKER_CHANGED" == "true" || "$FORCE_DEPLOY" == "true" ]] || \
-           [[ "$DEPLOY_COMPONENT" == "all" || "$DEPLOY_COMPONENT" == "backend" ]]; then
-          echo "deploy-backend=true" >> $GITHUB_OUTPUT
-          echo "✅ Backend will be deployed"
-        else
-          echo "deploy-backend=false" >> $GITHUB_OUTPUT
-          echo "⏭️ Backend deployment skipped"
-        fi
-        
-        # Frontend deployment logic
-        if [[ "$FRONTEND_CHANGED" == "true" || "$DOCKER_CHANGED" == "true" || "$FORCE_DEPLOY" == "true" ]] || \
-           [[ "$DEPLOY_COMPONENT" == "all" || "$DEPLOY_COMPONENT" == "frontend" ]]; then
-          echo "deploy-frontend=true" >> $GITHUB_OUTPUT
-          echo "✅ Frontend will be deployed"
-        else
-          echo "deploy-frontend=false" >> $GITHUB_OUTPUT
-          echo "⏭️ Frontend deployment skipped"
-        fi
-        
-        # Redis deployment logic (deploy if backend needs deployment or explicitly requested)
-        if [[ "$BACKEND_CHANGED" == "true" || "$FORCE_DEPLOY" == "true" ]] || \
-           [[ "$DEPLOY_COMPONENT" == "all" || "$DEPLOY_COMPONENT" == "redis" || "$DEPLOY_COMPONENT" == "backend" ]]; then
-          echo "deploy-redis=true" >> $GITHUB_OUTPUT
-          echo "✅ Redis will be deployed"
-        else
-          echo "deploy-redis=false" >> $GITHUB_OUTPUT
-          echo "⏭️ Redis deployment skipped"
-        fi
-
     - name: Show detected changes
       run: |
         echo "🔍 Change Detection Results:"
@@ -219,19 +110,18 @@ jobs:
         echo "Frontend changed: ${{ steps.changes.outputs.frontend }}"
         echo "Docker files changed: ${{ steps.changes.outputs.docker }}"
         echo "Workflow changed: ${{ steps.changes.outputs.workflow }}"
-        echo "Force deploy: ${{ github.event.inputs.force_deploy == 'true' || github.event_name == 'workflow_dispatch' }}"
+        echo "Force deploy: ${{ github.event.inputs.force_deploy == 'true' }}"
         echo "Deploy component: ${{ github.event.inputs.component || 'all' }}"
-        echo "=================================="
-        echo "📋 Deployment Decisions:"
-        echo "Deploy Backend: ${{ steps.deployment-logic.outputs.deploy-backend }}"
-        echo "Deploy Frontend: ${{ steps.deployment-logic.outputs.deploy-frontend }}"
-        echo "Deploy Redis: ${{ steps.deployment-logic.outputs.deploy-redis }}"
         echo "=================================="
 
   build-backend:
     needs: [azure-setup, detect-changes]
     runs-on: ubuntu-latest
-    if: needs.detect-changes.outputs.should-deploy-backend == 'true'
+    if: |
+      needs.detect-changes.outputs.backend-changed == 'true' || 
+      needs.detect-changes.outputs.docker-changed == 'true' ||
+      needs.detect-changes.outputs.force-deploy == 'true' ||
+      (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'backend')
     
     steps:
     - name: Checkout code
@@ -263,7 +153,11 @@ jobs:
   build-frontend:
     needs: [azure-setup, detect-changes]
     runs-on: ubuntu-latest
-    if: needs.detect-changes.outputs.should-deploy-frontend == 'true'
+    if: |
+      needs.detect-changes.outputs.frontend-changed == 'true' || 
+      needs.detect-changes.outputs.docker-changed == 'true' ||
+      needs.detect-changes.outputs.force-deploy == 'true' ||
+      (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'frontend')
     
     steps:
     - name: Checkout code
@@ -295,7 +189,7 @@ jobs:
   deploy:
     needs: [azure-setup, detect-changes, build-backend, build-frontend]
     runs-on: ubuntu-latest
-    if: always() && !cancelled() && needs.azure-setup.result == 'success' && needs.detect-changes.result == 'success' && (needs.detect-changes.outputs.should-deploy-backend == 'true' || needs.detect-changes.outputs.should-deploy-frontend == 'true' || needs.detect-changes.outputs.should-deploy-redis == 'true')
+    if: always() && !cancelled() && !failure()
     
     steps:
     - name: Checkout code
@@ -325,14 +219,16 @@ jobs:
           local url="$2"
           local data="$3"
           
+          echo "🔍 Making API call: $method $url" >&2
+          
           if [ -n "$data" ]; then
-            curl -s -X "$method" \
+            curl -s -w "\nHTTP_CODE:%{http_code}" -X "$method" \
               -H "Authorization: Bearer $AZURE_TOKEN" \
               -H "Content-Type: application/json" \
               -d "$data" \
               "$url"
           else
-            curl -s -X "$method" \
+            curl -s -w "\nHTTP_CODE:%{http_code}" -X "$method" \
               -H "Authorization: Bearer $AZURE_TOKEN" \
               -H "Content-Type: application/json" \
               "$url"
@@ -344,13 +240,15 @@ jobs:
           local container_name="$1"
           local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2021-09-01"
           
+          echo "🔍 Checking if container exists: $container_name" >&2
           local response=$(azure_api_call "GET" "$url")
-          local http_code=$(echo "$response" | jq -r '.error.code // empty' 2>/dev/null)
+          local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
+          local json_response=$(echo "$response" | sed '$d')
           
-          if [ "$http_code" = "ResourceNotFound" ] || [ "$http_code" = "NotFound" ]; then
-            echo ""
+          if [ "$http_code" = "200" ]; then
+            echo "$json_response" | jq -r '.name // empty' 2>/dev/null
           else
-            echo "$response" | jq -r '.name // empty' 2>/dev/null
+            echo ""
           fi
         }
         
@@ -359,29 +257,38 @@ jobs:
           local container_name="$1"
           local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2021-09-01"
           
-          echo "🗑️ Deleting container: $container_name"
-          local result=$(azure_api_call "DELETE" "$url")
-          echo "Delete result: $result"
+          echo "🗑️ Deleting container: $container_name" >&2
+          local response=$(azure_api_call "DELETE" "$url")
+          local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
+          
+          if [ "$http_code" = "200" ] || [ "$http_code" = "204" ]; then
+            echo "✅ Container deletion initiated successfully" >&2
+          else
+            echo "❌ Container deletion failed with HTTP code: $http_code" >&2
+            echo "$response" >&2
+          fi
         }
         
-        # Function to create container instance with error handling
+        # Function to create container instance
         create_container() {
           local container_name="$1"
           local container_spec="$2"
           local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2021-09-01"
           
-          echo "🚀 Creating container: $container_name"
-          local result=$(azure_api_call "PUT" "$url" "$container_spec")
+          echo "🚀 Creating container: $container_name" >&2
+          echo "📍 URL: $url" >&2
           
-          # Check for errors
-          local error_code=$(echo "$result" | jq -r '.error.code // empty' 2>/dev/null)
-          if [ -n "$error_code" ]; then
-            echo "❌ Container creation failed:"
-            echo "$result" | jq '.error' 2>/dev/null || echo "$result"
-            return 1
+          local response=$(azure_api_call "PUT" "$url" "$container_spec")
+          local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
+          local json_response=$(echo "$response" | sed '$d')
+          
+          if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
+            echo "✅ Container creation initiated successfully" >&2
+            echo "$json_response" | jq '.properties.provisioningState // "Unknown"' 2>/dev/null >&2
           else
-            echo "✅ Container creation initiated successfully"
-            return 0
+            echo "❌ Container creation failed with HTTP code: $http_code" >&2
+            echo "$json_response" >&2
+            return 1
           fi
         }
         
@@ -391,35 +298,23 @@ jobs:
           local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2021-09-01"
           
           local response=$(azure_api_call "GET" "$url")
-          echo "$response" | jq -r '.properties.instanceView.state // "Unknown"' 2>/dev/null
+          local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
+          local json_response=$(echo "$response" | sed '$d')
+          
+          if [ "$http_code" = "200" ]; then
+            echo "$json_response" | jq -r '.properties.instanceView.state // "Unknown"' 2>/dev/null
+          else
+            echo "Unknown"
+          fi
         }
         
-        # Function to wait for container to be ready
-        wait_for_container() {
-          local container_name="$1"
-          local max_attempts=20
-          local attempt=1
-          
-          echo "⏳ Waiting for container $container_name to be ready..."
-          
-          while [ $attempt -le $max_attempts ]; do
-            local status=$(get_container_status "$container_name")
-            echo "Attempt $attempt/$max_attempts - Status: $status"
-            
-            if [ "$status" = "Running" ]; then
-              echo "✅ Container $container_name is running"
-              return 0
-            elif [ "$status" = "Failed" ] || [ "$status" = "Terminated" ]; then
-              echo "❌ Container $container_name failed to start"
-              return 1
-            fi
-            
-            sleep 15
-            ((attempt++))
-          done
-          
-          echo "⚠️ Container $container_name did not start within expected time"
-          return 1
+        # Debug function to verify environment variables
+        debug_env() {
+          echo "🔍 Environment Variables Debug:" >&2
+          echo "SUBSCRIPTION_ID: ${SUBSCRIPTION_ID:-NOT_SET}" >&2
+          echo "RESOURCE_GROUP: ${RESOURCE_GROUP:-NOT_SET}" >&2
+          echo "API_BASE: $API_BASE" >&2
+          echo "TOKEN_LENGTH: ${#AZURE_TOKEN}" >&2
         }
         EOF
         
@@ -448,7 +343,12 @@ jobs:
         echo "Redis exists: ${REDIS_EXISTS:-none}"
 
     - name: Deploy Redis (if needed)
-      if: needs.detect-changes.outputs.should-deploy-redis == 'true' && steps.check-deployments.outputs.redis-exists == ''
+      if: |
+        steps.check-deployments.outputs.redis-exists == '' &&
+        (needs.detect-changes.outputs.backend-changed == 'true' || 
+         needs.detect-changes.outputs.force-deploy == 'true' ||
+         needs.detect-changes.outputs.deploy-component == 'all' ||
+         needs.detect-changes.outputs.deploy-component == 'redis')
       env:
         GITHUB_RUN_NUMBER: ${{ github.run_number }}
       run: |
@@ -499,15 +399,16 @@ jobs:
         EOF
         )
         
-        if create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"; then
-          wait_for_container "elshawi-redis-${GITHUB_RUN_NUMBER}"
-        else
-          echo "❌ Failed to create Redis container"
-          exit 1
-        fi
+        create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"
+        
+        echo "⏳ Waiting for Redis to be ready..."
+        sleep 30
 
     - name: Deploy Backend
-      if: needs.detect-changes.outputs.should-deploy-backend == 'true' && (needs.build-backend.result == 'success' || needs.build-backend.result == 'skipped')
+      if: |
+        needs.build-backend.result == 'success' ||
+        (needs.detect-changes.outputs.force-deploy == 'true' && 
+         (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'backend'))
       env:
         GITHUB_RUN_NUMBER: ${{ github.run_number }}
         GITHUB_SHA: ${{ github.sha }}
@@ -536,7 +437,7 @@ jobs:
               {
                 "name": "backend",
                 "properties": {
-                  "image": "${REGISTRY}/${BACKEND_IMAGE_NAME}:latest",
+                  "image": "${REGISTRY}/${BACKEND_IMAGE_NAME}:${GITHUB_SHA}",
                   "ports": [
                     {
                       "port": 8000,
@@ -586,15 +487,13 @@ jobs:
         EOF
         )
         
-        if create_container "elshawi-backend-${GITHUB_RUN_NUMBER}" "$BACKEND_SPEC"; then
-          wait_for_container "elshawi-backend-${GITHUB_RUN_NUMBER}"
-        else
-          echo "❌ Failed to create Backend container"
-          exit 1
-        fi
+        create_container "elshawi-backend-${GITHUB_RUN_NUMBER}" "$BACKEND_SPEC"
 
     - name: Deploy Frontend
-      if: needs.detect-changes.outputs.should-deploy-frontend == 'true' && (needs.build-frontend.result == 'success' || needs.build-frontend.result == 'skipped')
+      if: |
+        needs.build-frontend.result == 'success' ||
+        (needs.detect-changes.outputs.force-deploy == 'true' && 
+         (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'frontend'))
       env:
         GITHUB_RUN_NUMBER: ${{ github.run_number }}
         GITHUB_SHA: ${{ github.sha }}
@@ -622,7 +521,7 @@ jobs:
               {
                 "name": "frontend",
                 "properties": {
-                  "image": "${REGISTRY}/${FRONTEND_IMAGE_NAME}:latest",
+                  "image": "${REGISTRY}/${FRONTEND_IMAGE_NAME}:${GITHUB_SHA}",
                   "ports": [
                     {
                       "port": 3000,
@@ -666,12 +565,7 @@ jobs:
         EOF
         )
         
-        if create_container "elshawi-frontend-${GITHUB_RUN_NUMBER}" "$FRONTEND_SPEC"; then
-          wait_for_container "elshawi-frontend-${GITHUB_RUN_NUMBER}"
-        else
-          echo "❌ Failed to create Frontend container"
-          exit 1
-        fi
+        create_container "elshawi-frontend-${GITHUB_RUN_NUMBER}" "$FRONTEND_SPEC"
 
     - name: Health Check
       env:
@@ -679,32 +573,32 @@ jobs:
       run: |
         echo "🏥 Performing health checks..."
         
-        # Wait for containers to be fully ready
-        sleep 30
+        # Wait for containers to be running
+        sleep 45
         
         # Check backend health
-        if [ "${{ needs.detect-changes.outputs.should-deploy-backend }}" == "true" ]; then
+        if [ "${{ needs.build-backend.result }}" == "success" ] || [ "${{ needs.detect-changes.outputs.force-deploy }}" == "true" ]; then
           echo "Checking backend health..."
-          for i in {1..10}; do
+          for i in {1..8}; do
             if curl -f -s --max-time 10 "https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000/health/" > /dev/null 2>&1; then
               echo "✅ Backend is healthy"
               break
             else
-              echo "⏳ Backend not ready yet, attempt $i/10"
+              echo "⏳ Backend not ready yet, attempt $i/8"
               sleep 15
             fi
           done
         fi
         
         # Check frontend health
-        if [ "${{ needs.detect-changes.outputs.should-deploy-frontend }}" == "true" ]; then
+        if [ "${{ needs.build-frontend.result }}" == "success" ] || [ "${{ needs.detect-changes.outputs.force-deploy }}" == "true" ]; then
           echo "Checking frontend health..."
-          for i in {1..10}; do
+          for i in {1..8}; do
             if curl -f -s --max-time 10 "https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000" > /dev/null 2>&1; then
               echo "✅ Frontend is healthy"
               break
             else
-              echo "⏳ Frontend not ready yet, attempt $i/10"
+              echo "⏳ Frontend not ready yet, attempt $i/8"
               sleep 15
             fi
           done
@@ -717,21 +611,16 @@ jobs:
         echo "🚀 Deployment Complete!"
         echo "=================================="
         echo "📊 Deployment Summary:"
-        echo "Backend deployed: ${{ needs.detect-changes.outputs.should-deploy-backend }}"
-        echo "Frontend deployed: ${{ needs.detect-changes.outputs.should-deploy-frontend }}"
-        echo "Redis deployed: ${{ needs.detect-changes.outputs.should-deploy-redis }}"
+        echo "Backend changed: ${{ needs.detect-changes.outputs.backend-changed }}"
+        echo "Frontend changed: ${{ needs.detect-changes.outputs.frontend-changed }}"
+        echo "Docker changed: ${{ needs.detect-changes.outputs.docker-changed }}"
+        echo "Force deploy: ${{ needs.detect-changes.outputs.force-deploy }}"
         echo "=================================="
         echo "🌐 Application URLs:"
-        if [ "${{ needs.detect-changes.outputs.should-deploy-backend }}" == "true" ]; then
-          echo "Backend API: https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000"
-          echo "Admin Panel: https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000/admin/"
-        fi
-        if [ "${{ needs.detect-changes.outputs.should-deploy-frontend }}" == "true" ]; then
-          echo "Frontend App: https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000"
-        fi
-        if [ "${{ needs.detect-changes.outputs.should-deploy-redis }}" == "true" ]; then
-          echo "Redis: elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:6379"
-        fi
+        echo "Backend API: https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000"
+        echo "Frontend App: https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000"
+        echo "Admin Panel: https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000/admin/"
+        echo "Redis: elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:6379"
         echo "=================================="
 
   cleanup:
@@ -785,4 +674,64 @@ jobs:
       run: |
         source cleanup_helper.sh
         
-        echo
+        echo "🧹 Cleaning up old deployments..."
+        
+        # Get all containers with our prefix
+        ALL_CONTAINERS=$(list_containers)
+        CURRENT_CONTAINERS="elshawi-backend-${GITHUB_RUN_NUMBER}
+        elshawi-frontend-${GITHUB_RUN_NUMBER}
+        elshawi-redis-${GITHUB_RUN_NUMBER}"
+        
+        if [ -n "$ALL_CONTAINERS" ]; then
+          # Keep last 2 deployments (6 containers total)
+          OLD_CONTAINERS=$(echo "$ALL_CONTAINERS" | grep -v -F "$CURRENT_CONTAINERS" | head -n -6 || true)
+          
+          if [ -n "$OLD_CONTAINERS" ]; then
+            echo "🗑️ Deleting old containers:"
+            echo "$OLD_CONTAINERS"
+            
+            for container in $OLD_CONTAINERS; do
+              echo "Deleting: $container"
+              delete_container "$container" &
+            done
+            
+            # Wait for all deletions to complete
+            wait
+            echo "✅ Cleanup completed"
+          else
+            echo "✨ No old containers to cleanup"
+          fi
+        else
+          echo "✨ No containers found for cleanup"
+        fi
+
+  notification:
+    needs: [azure-setup, detect-changes, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Deployment Status Summary
+      env:
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+      run: |
+        echo "📋 Final Deployment Status"
+        echo "=================================="
+        echo "Azure Setup: ${{ needs.azure-setup.result }}"
+        echo "Change Detection: ${{ needs.detect-changes.result }}"
+        echo "Deployment: ${{ needs.deploy.result }}"
+        echo "Backend Changed: ${{ needs.detect-changes.outputs.backend-changed }}"
+        echo "Frontend Changed: ${{ needs.detect-changes.outputs.frontend-changed }}"
+        echo "Docker Changed: ${{ needs.detect-changes.outputs.docker-changed }}"
+        echo "=================================="
+        
+        if [ "${{ needs.deploy.result }}" == "success" ]; then
+          echo "✅ Deployment completed successfully!"
+          echo "🌐 Your app is live at:"
+          echo "Frontend: https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000"
+        elif [ "${{ needs.deploy.result }}" == "skipped" ]; then
+          echo "⏭️ Deployment was skipped (no changes detected)"
+        else
+          echo "❌ Deployment failed or was cancelled"
+          exit 1
+        fi
