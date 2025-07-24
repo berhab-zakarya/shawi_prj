@@ -4,9 +4,11 @@ from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-$_q)*y(1q3=%oq9&$uzlp%7awjpki-puni*xnmil(ad#5@et+g')
 
 # Environment variables with fallback values
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-$_q)*y(1q3=%oq9&$uzlp%7awjpki-puni*xnmil(ad#5@et+g')
+
+
 DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'
 
 # Database configuration from environment variables
@@ -40,7 +42,7 @@ SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'True').lower() == 'true'
 TIME_ZONE = os.getenv('TIME_ZONE', 'UTC')
 USE_TZ = os.getenv('USE_TZ', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = ['*']
 CORS_ALLOW_ALL_ORIGINS = True
 
 CSRF_TRUSTED_ORIGINS = [
