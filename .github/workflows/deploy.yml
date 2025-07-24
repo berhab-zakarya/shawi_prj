@@ -43,6 +43,8 @@ jobs:
         AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
         echo "🔐 Verifying Azure access token..."
+        echo "🔍 Subscription ID: $AZURE_SUBSCRIPTION_ID"
+        echo "🔍 Resource Group: $RESOURCE_GROUP"
         
         # Test the access token with subscription info
         HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/sub_response.json \
@@ -332,7 +334,7 @@ jobs:
         # Check if containers already exist
         BACKEND_EXISTS=$(check_container_exists "elshawi-backend-${GITHUB_RUN_NUMBER}")
         FRONTEND_EXISTS=$(check_container_exists "elshawi-frontend-${GITHUB_RUN_NUMBER}")
-        REDIS_EXISTS=$(check_container_exists "elshawiRedis-${GITHUB_RUN_NUMBER}")
+        REDIS_EXISTS=$(check_container_exists "elshawi-redis-${GITHUB_RUN_NUMBER}")
         
         echo "backend-exists=${BACKEND_EXISTS}" >> $GITHUB_OUTPUT
         echo "frontend-exists=${FRONTEND_EXISTS}" >> $GITHUB_OUTPUT
@@ -355,6 +357,9 @@ jobs:
         source azure_rest_helper.sh
         
         echo "🚀 Deploying Redis..."
+        echo "🔍 Subscription ID: $AZURE_SUBSCRIPTION_ID"
+        echo "🔍 Resource Group: $RESOURCE_GROUP"
+
         
         # Redis container specification
         REDIS_SPEC=$(cat << EOF
@@ -391,7 +396,7 @@ jobs:
                   "protocol": "TCP"
                 }
               ],
-              "dnsNameLabel": "elshawiRedis-${GITHUB_RUN_NUMBER}"
+              "dnsNameLabel": "elshawi-redis-${GITHUB_RUN_NUMBER}"
             },
             "restartPolicy": "Always"
           }
@@ -399,7 +404,7 @@ jobs:
         EOF
         )
         
-        create_container "elshawiRedis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"
+        create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"
         
         echo "⏳ Waiting for Redis to be ready..."
         sleep 30
@@ -448,7 +453,7 @@ jobs:
                     {"name": "DJANGO_SECRET_KEY", "value": "${DJANGO_SECRET_KEY}"},
                     {"name": "DJANGO_DEBUG", "value": "False"},
                     {"name": "DJANGO_ALLOWED_HOSTS", "value": "elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io,localhost"},
-                    {"name": "REDIS_URL", "value": "elshawiRedis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:6379"},
+                    {"name": "REDIS_URL", "value": "elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:6379"},
                     {"name": "DATABASE_URL", "value": "sqlite:///db.sqlite3"},
                     {"name": "CORS_ALLOWED_ORIGINS", "value": "https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io"},
                     {"name": "GUNICORN_WORKERS", "value": "2"},
@@ -620,7 +625,7 @@ jobs:
         echo "Backend API: https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000"
         echo "Frontend App: https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000"
         echo "Admin Panel: https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000/admin/"
-        echo "Redis: elshawiRedis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:6379"
+        echo "Redis: elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:6379"
         echo "=================================="
 
   cleanup:
@@ -680,7 +685,7 @@ jobs:
         ALL_CONTAINERS=$(list_containers)
         CURRENT_CONTAINERS="elshawi-backend-${GITHUB_RUN_NUMBER}
         elshawi-frontend-${GITHUB_RUN_NUMBER}
-        elshawiRedis-${GITHUB_RUN_NUMBER}"
+        elshawi-redis-${GITHUB_RUN_NUMBER}"
         
         if [ -n "$ALL_CONTAINERS" ]; then
           # Keep last 2 deployments (6 containers total)
