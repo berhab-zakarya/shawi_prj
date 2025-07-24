@@ -43,11 +43,10 @@ jobs:
         push: true
         tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
 
-    # Use Azure CLI with username/password (works with student accounts)
-    - name: Azure Login
+    # Use Azure CLI with Access Token (temporary solution)
+    - name: Azure Login using token
       run: |
-        az login --username ${{ secrets.AZURE_USERNAME }} --password ${{ secrets.AZURE_PASSWORD }}
-        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
 
     # Deploy Redis first (backend dependency)
     - name: Deploy Redis to Azure Container Instances  
