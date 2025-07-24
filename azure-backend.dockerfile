@@ -1,4 +1,4 @@
-# 🚀 Production Stage - Optimized for Docker Layer Caching
+# 🚀 Azure Production Stage - Optimized for Container Instances
 FROM python:3.11-slim
 
 # Set environment variables
@@ -24,28 +24,38 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy only requirements first (for better caching)
+# Copy requirements first (for better caching)
 COPY requirements.txt ./
-RUN touch db.sqlite3 && chown app:app db.sqlite3
-# Install Python dependencies (cached layer if requirements.txt unchanged)
+
+# Install Python dependencies
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
-# Create non-root user early
+# Create non-root user
 RUN useradd --create-home --shell /bin/bash app
 
 # Create directories and set permissions
 RUN mkdir -p /app/staticfiles /app/media /app/logs && \
     chown -R app:app /app
 
-# Copy application code (this layer changes most frequently)
+# Copy application code
 COPY --chown=app:app . .
+
+# Create SQLite database file with proper permissions
+RUN touch db.sqlite3 && chown app:app db.sqlite3
 
 # Switch to app user
 USER app
 
+# Collect static files
+RUN python manage.py collectstatic --noinput || true
+
 # Expose port
 EXPOSE 8000
 
-# Use exec form to avoid shell interpretation issues
-CMD ["sh", "-c", "python manage.py collectstatic --noinput && python manage.py migrate --noinput && gunicorn elshawi_backend.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 30 --access-logfile - --error-logfile - --log-level info"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/api/health/ || exit 1
+
+# Start command
+CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn elshawi_backend.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 120 --access-logfile - --error-logfile - --log-level info"]

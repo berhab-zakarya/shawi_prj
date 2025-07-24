@@ -104,28 +104,6 @@ services:
     depends_on:
       - redis
 
-  celery_beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    command: sh -c "celery -A elshawi_backend beat --loglevel=info >> /app/logs/celery_beat.log 2>&1"
-    volumes:
-      - ./backend:/app
-      - ./logs:/app/logs
-    depends_on:
-      - redis
-  weaviate:
-    image: semitechnologies/weaviate:latest
-    restart: always
-    ports:
-      - "8080:8080"
-    environment:
-      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
-      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
-      ENABLE_MODULES: ''
-      DEFAULT_VECTORIZER_MODULE: 'none'
-    volumes:
-      - weaviate_data:/var/lib/weaviate
   db:
     image: postgres:15
     environment:
@@ -137,5 +115,4 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 volumes:
-  weaviate_data:
   postgres_data:

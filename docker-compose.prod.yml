@@ -15,23 +15,6 @@ services:
       timeout: 10s
       retries: 3
 
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-elshawi_db}
-      POSTGRES_USER: ${POSTGRES_USER:-elshawi_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-elshawi_pass}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-elshawi_user}"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   backend:
     build:
       context: ./backend
@@ -52,8 +35,6 @@ services:
       - GUNICORN_WORKERS=3
       - GUNICORN_TIMEOUT=30
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped

@@ -10,14 +10,20 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-$_q)*y(1q3=%oq9&$uz
 DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'
 
 # Database configuration from environment variables
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': os.getenv('POSTGRES_DB', 'elshawi_db'),
+#         'USER': os.getenv('POSTGRES_USER', 'elshawi_user'),
+#         'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'elshawi_pass'),
+#         'HOST': os.getenv('POSTGRES_HOST', 'db'),
+#         'PORT': os.getenv('POSTGRES_PORT', '5432'),
+#     }
+# }
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('POSTGRES_DB', 'elshawi_db'),
-        'USER': os.getenv('POSTGRES_USER', 'elshawi_user'),
-        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'elshawi_pass'),
-        'HOST': os.getenv('POSTGRES_HOST', 'db'),
-        'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
