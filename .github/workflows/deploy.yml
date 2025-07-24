@@ -1,4 +1,4 @@
-name: Deploy Full Stack App to Azure
+name: Smart Deploy Full Stack App to Azure
 
 on:
   push:
@@ -6,6 +6,22 @@ on:
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deploy all components'
+        required: false
+        default: false
+        type: boolean
+      component:
+        description: 'Deploy specific component (backend/frontend/redis/all)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - backend
+        - frontend
+        - redis
 
 env:
   REGISTRY: ${{ secrets.ACR_REGISTRY }}
@@ -13,12 +29,72 @@ env:
   FRONTEND_IMAGE_NAME: elshawi-frontend
 
 jobs:
-  build-and-deploy:
+  detect-changes:
     runs-on: ubuntu-latest
+    outputs:
+      backend-changed: ${{ steps.changes.outputs.backend }}
+      frontend-changed: ${{ steps.changes.outputs.frontend }}
+      docker-changed: ${{ steps.changes.outputs.docker }}
+      workflow-changed: ${{ steps.changes.outputs.workflow }}
+      force-deploy: ${{ github.event.inputs.force_deploy == 'true' || github.event_name == 'workflow_dispatch' }}
+      deploy-component: ${{ github.event.inputs.component || 'all' }}
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for better change detection
+
+    - name: Detect file changes
+      uses: dorny/paths-filter@v2
+      id: changes
+      with:
+        filters: |
+          backend:
+            - 'backend/**'
+            - 'requirements.txt'
+            - 'pyproject.toml'
+            - 'poetry.lock'
+          frontend:
+            - 'frontend/**'
+            - 'package.json'
+            - 'package-lock.json'
+            - 'yarn.lock'
+            - 'pnpm-lock.yaml'
+          docker:
+            - '**/Dockerfile*'
+            - '**/.dockerignore'
+            - 'docker-compose*'
+          workflow:
+            - '.github/workflows/**'
+
+    - name: Show detected changes
+      run: |
+        echo "🔍 Change Detection Results:"
+        echo "=================================="
+        echo "Backend changed: ${{ steps.changes.outputs.backend }}"
+        echo "Frontend changed: ${{ steps.changes.outputs.frontend }}"
+        echo "Docker files changed: ${{ steps.changes.outputs.docker }}"
+        echo "Workflow changed: ${{ steps.changes.outputs.workflow }}"
+        echo "Force deploy: ${{ github.event.inputs.force_deploy == 'true' }}"
+        echo "Deploy component: ${{ github.event.inputs.component || 'all' }}"
+        echo "=================================="
+
+  build-backend:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: |
+      needs.detect-changes.outputs.backend-changed == 'true' || 
+      needs.detect-changes.outputs.docker-changed == 'true' ||
+      needs.detect-changes.outputs.force-deploy == 'true' ||
+      (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'backend')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
     - name: Log in to Azure Container Registry
       uses: docker/login-action@v3
@@ -33,7 +109,35 @@ jobs:
         context: ./backend
         file: ./backend/Dockerfile.prod
         push: true
-        tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+          ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+
+  build-frontend:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: |
+      needs.detect-changes.outputs.frontend-changed == 'true' || 
+      needs.detect-changes.outputs.docker-changed == 'true' ||
+      needs.detect-changes.outputs.force-deploy == 'true' ||
+      (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'frontend')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Azure Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
 
     - name: Build and push Frontend (Next.js) image
       uses: docker/build-push-action@v5
@@ -41,16 +145,47 @@ jobs:
         context: ./frontend
         file: ./frontend/Dockerfile.prod
         push: true
-        tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ github.sha }}
+          ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
 
-    # Use Azure CLI with Access Token (temporary solution)
+  deploy:
+    needs: [detect-changes, build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    if: always() && !cancelled() && !failure()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Azure Login using token
       run: |
         az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
 
-    # Deploy Redis first (backend dependency)
-    - name: Deploy Redis to Azure Container Instances  
+    - name: Check existing deployments
+      id: check-deployments
       run: |
+        # Check if containers already exist
+        BACKEND_EXISTS=$(az container show --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name elshawi-backend-${{ github.run_number }} --query "name" -o tsv 2>/dev/null || echo "")
+        FRONTEND_EXISTS=$(az container show --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name elshawi-frontend-${{ github.run_number }} --query "name" -o tsv 2>/dev/null || echo "")
+        REDIS_EXISTS=$(az container show --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name elshawi-redis-${{ github.run_number }} --query "name" -o tsv 2>/dev/null || echo "")
+        
+        echo "backend-exists=${BACKEND_EXISTS}" >> $GITHUB_OUTPUT
+        echo "frontend-exists=${FRONTEND_EXISTS}" >> $GITHUB_OUTPUT
+        echo "redis-exists=${REDIS_EXISTS}" >> $GITHUB_OUTPUT
+
+    - name: Deploy Redis (if needed)
+      if: |
+        steps.check-deployments.outputs.redis-exists == '' &&
+        (needs.detect-changes.outputs.backend-changed == 'true' || 
+         needs.detect-changes.outputs.force-deploy == 'true' ||
+         needs.detect-changes.outputs.deploy-component == 'all' ||
+         needs.detect-changes.outputs.deploy-component == 'redis')
+      run: |
+        echo "🚀 Deploying Redis..."
         az container create \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
           --name elshawi-redis-${{ github.run_number }} \
@@ -60,16 +195,35 @@ jobs:
           --command-line "redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru" \
           --cpu 0.5 \
           --memory 0.5 \
-          --location westeurope
+          --location westeurope \
+          --restart-policy Always
 
-    # Wait for Redis to be ready
     - name: Wait for Redis to be ready
+      if: |
+        steps.check-deployments.outputs.redis-exists == '' &&
+        (needs.detect-changes.outputs.backend-changed == 'true' || 
+         needs.detect-changes.outputs.force-deploy == 'true' ||
+         needs.detect-changes.outputs.deploy-component == 'all' ||
+         needs.detect-changes.outputs.deploy-component == 'redis')
       run: |
-        echo "Waiting 30 seconds for Redis to start..."
+        echo "⏳ Waiting for Redis to be ready..."
         sleep 30
 
-    - name: Deploy Backend to Azure Container Instances
+    - name: Deploy Backend
+      if: |
+        needs.build-backend.result == 'success' ||
+        (needs.detect-changes.outputs.force-deploy == 'true' && 
+         (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'backend'))
       run: |
+        echo "🚀 Deploying Backend..."
+        
+        # Delete existing container if it exists
+        if [ "${{ steps.check-deployments.outputs.backend-exists }}" != "" ]; then
+          echo "🗑️ Removing existing backend container..."
+          az container delete --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name elshawi-backend-${{ github.run_number }} --yes --no-wait || true
+          sleep 10
+        fi
+        
         az container create \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
           --name elshawi-backend-${{ github.run_number }} \
@@ -90,10 +244,24 @@ jobs:
             GUNICORN_TIMEOUT="30" \
           --cpu 1 \
           --memory 2 \
-          --location westeurope
+          --location westeurope \
+          --restart-policy Always
 
-    - name: Deploy Frontend to Azure Container Instances
+    - name: Deploy Frontend
+      if: |
+        needs.build-frontend.result == 'success' ||
+        (needs.detect-changes.outputs.force-deploy == 'true' && 
+         (needs.detect-changes.outputs.deploy-component == 'all' || needs.detect-changes.outputs.deploy-component == 'frontend'))
       run: |
+        echo "🚀 Deploying Frontend..."
+        
+        # Delete existing container if it exists
+        if [ "${{ steps.check-deployments.outputs.frontend-exists }}" != "" ]; then
+          echo "🗑️ Removing existing frontend container..."
+          az container delete --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name elshawi-frontend-${{ github.run_number }} --yes --no-wait || true
+          sleep 10
+        fi
+        
         az container create \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
           --name elshawi-frontend-${{ github.run_number }} \
@@ -108,23 +276,115 @@ jobs:
             NODE_ENV="production" \
           --cpu 1 \
           --memory 1.5 \
-          --location westeurope
+          --location westeurope \
+          --restart-policy Always
+
+    - name: Health Check
+      run: |
+        echo "🏥 Performing health checks..."
+        
+        # Wait for containers to be running
+        sleep 30
+        
+        # Check backend health
+        if [ "${{ needs.build-backend.result }}" == "success" ] || [ "${{ needs.detect-changes.outputs.force-deploy }}" == "true" ]; then
+          echo "Checking backend health..."
+          for i in {1..5}; do
+            if curl -f -s "https://elshawi-backend-${{ github.run_number }}.westeurope.azurecontainer.io:8000/health/" > /dev/null 2>&1; then
+              echo "✅ Backend is healthy"
+              break
+            else
+              echo "⏳ Backend not ready yet, attempt $i/5"
+              sleep 10
+            fi
+          done
+        fi
+        
+        # Check frontend health
+        if [ "${{ needs.build-frontend.result }}" == "success" ] || [ "${{ needs.detect-changes.outputs.force-deploy }}" == "true" ]; then
+          echo "Checking frontend health..."
+          for i in {1..5}; do
+            if curl -f -s "https://elshawi-frontend-${{ github.run_number }}.westeurope.azurecontainer.io:3000" > /dev/null 2>&1; then
+              echo "✅ Frontend is healthy"
+              break
+            else
+              echo "⏳ Frontend not ready yet, attempt $i/5"
+              sleep 10
+            fi
+          done
+        fi
 
     - name: Get deployment URLs
       run: |
         echo "🚀 Deployment Complete!"
         echo "=================================="
+        echo "📊 Deployment Summary:"
+        echo "Backend changed: ${{ needs.detect-changes.outputs.backend-changed }}"
+        echo "Frontend changed: ${{ needs.detect-changes.outputs.frontend-changed }}"
+        echo "Docker changed: ${{ needs.detect-changes.outputs.docker-changed }}"
+        echo "Force deploy: ${{ needs.detect-changes.outputs.force-deploy }}"
+        echo "=================================="
+        echo "🌐 Application URLs:"
         echo "Backend API: https://elshawi-backend-${{ github.run_number }}.westeurope.azurecontainer.io:8000"
         echo "Frontend App: https://elshawi-frontend-${{ github.run_number }}.westeurope.azurecontainer.io:3000"
         echo "Admin Panel: https://elshawi-backend-${{ github.run_number }}.westeurope.azurecontainer.io:8000/admin/"
         echo "=================================="
 
-    # Optional: Cleanup old deployments (keep last 2)
+  cleanup:
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: always() && needs.deploy.result == 'success'
+    
+    steps:
+    - name: Azure Login using token
+      run: |
+        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+
     - name: Cleanup old deployments
       run: |
-        # Get list of old containers and delete them (keep last 2 deployments)
-        OLD_CONTAINERS=$(az container list --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --query "[?starts_with(name, 'elshawi-') && name != 'elshawi-backend-${{ github.run_number }}' && name != 'elshawi-frontend-${{ github.run_number }}' && name != 'elshawi-redis-${{ github.run_number }}'].name" -o tsv | head -n -4)
-        for container in $OLD_CONTAINERS; do
-          echo "Deleting old container: $container"
-          az container delete --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name $container --yes --no-wait || true
-        done
+        echo "🧹 Cleaning up old deployments..."
+        
+        # Get all containers with our prefix, excluding current deployment
+        ALL_CONTAINERS=$(az container list --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --query "[?starts_with(name, 'elshawi-')].name" -o tsv)
+        CURRENT_CONTAINERS="elshawi-backend-${{ github.run_number }} elshawi-frontend-${{ github.run_number }} elshawi-redis-${{ github.run_number }}"
+        
+        # Keep last 2 deployments (6 containers total: 2 * (backend + frontend + redis))
+        OLD_CONTAINERS=$(echo "$ALL_CONTAINERS" | grep -v -E "($(echo $CURRENT_CONTAINERS | tr ' ' '|'))" | head -n -6 || true)
+        
+        if [ -n "$OLD_CONTAINERS" ]; then
+          echo "🗑️ Deleting old containers:"
+          echo "$OLD_CONTAINERS"
+          
+          for container in $OLD_CONTAINERS; do
+            echo "Deleting: $container"
+            az container delete --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name "$container" --yes --no-wait || true
+          done
+        else
+          echo "✨ No old containers to cleanup"
+        fi
+
+  notification:
+    needs: [detect-changes, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Deployment Status Summary
+      run: |
+        echo "📋 Final Deployment Status"
+        echo "=================================="
+        echo "Change Detection: ${{ needs.detect-changes.result }}"
+        echo "Deployment: ${{ needs.deploy.result }}"
+        echo "Backend Changed: ${{ needs.detect-changes.outputs.backend-changed }}"
+        echo "Frontend Changed: ${{ needs.detect-changes.outputs.frontend-changed }}"
+        echo "Docker Changed: ${{ needs.detect-changes.outputs.docker-changed }}"
+        echo "=================================="
+        
+        if [ "${{ needs.deploy.result }}" == "success" ]; then
+          echo "✅ Deployment completed successfully!"
+        elif [ "${{ needs.deploy.result }}" == "skipped" ]; then
+          echo "⏭️ Deployment was skipped (no changes detected)"
+        else
+          echo "❌ Deployment failed or was cancelled"
+          exit 1
+        fi
