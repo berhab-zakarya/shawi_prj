@@ -336,9 +336,28 @@ jobs:
     if: always() && needs.deploy.result == 'success'
     
     steps:
-    - name: Azure Login using token
+    - name: Setup Azure authentication with access token
       run: |
-        az login --access-token ${{ secrets.AZURE_ACCESS_TOKEN }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+        echo "🔐 Setting up Azure authentication..."
+        
+        # Method 1: Try setting environment variable for Azure CLI
+        export AZURE_ACCESS_TOKEN="${{ secrets.AZURE_ACCESS_TOKEN }}"
+        export AZURE_SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+        
+        # Method 2: Alternative - use direct REST API calls
+        # Test the token validity
+        TOKEN_RESPONSE=$(curl -s -X GET \
+          -H "Authorization: Bearer ${{ secrets.AZURE_ACCESS_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}?api-version=2020-01-01")
+        
+        if echo "$TOKEN_RESPONSE" | grep -q "subscriptionId"; then
+          echo "✅ Access token is valid"
+        else
+          echo "❌ Access token validation failed"
+          echo "$TOKEN_RESPONSE"
+          exit 1
+        fi
 
     - name: Cleanup old deployments
       run: |
