@@ -215,7 +215,7 @@ jobs:
         # Azure REST API helper functions
         AZURE_TOKEN="${AZURE_ACCESS_TOKEN}"
         SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID}"
-        RESOURCE_GROUP="${AZURE_RESOURCE_GROUP}"
+        RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-${RESOURCE_GROUP:-elshawi-rg}}"
         API_BASE="https://management.azure.com"
         
         # Function to make authenticated REST API calls
@@ -351,17 +351,17 @@ jobs:
       if: |
         steps.check-deployments.outputs.redis-exists == '' &&
         (needs.detect-changes.outputs.backend-changed == 'true' || 
-         needs.detect-changes.outputs.force-deploy == 'true' ||
-         needs.detect-changes.outputs.deploy-component == 'all' ||
-         needs.detect-changes.outputs.deploy-component == 'redis')
+        needs.detect-changes.outputs.force-deploy == 'true' ||
+        needs.detect-changes.outputs.deploy-component == 'all' ||
+        needs.detect-changes.outputs.deploy-component == 'redis')
       env:
         GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
         source azure_rest_helper.sh
-        
         echo "🚀 Deploying Redis..."
         echo "🔍 Subscription ID: $AZURE_SUBSCRIPTION_ID"
-        echo "🔍 Resource Group: $RESOURCE_GROUP"
+        echo "🔍 Resource Group: $AZURE_RESOURCE_GROUP"
 
         
         # Redis container specification
