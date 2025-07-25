@@ -42,17 +42,14 @@ SECURE_HSTS_PRELOAD = os.getenv('SECURE_HSTS_PRELOAD', 'True').lower() == 'true'
 TIME_ZONE = os.getenv('TIME_ZONE', 'UTC')
 USE_TZ = os.getenv('USE_TZ', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ["*"]
 CORS_ALLOW_ALL_ORIGINS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
     "http://localhost:8001",
     "http://127.0.0.1:8001",
-    "https://eilflawyers.com",
-    "http://eilflawyers.com",
-    "http://31.97.182.92",
-    "https://31.97.182.92",
+
 ]
 
 CORS_ALLOWED_ORIGINS = [
