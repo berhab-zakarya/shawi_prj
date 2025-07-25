@@ -307,7 +307,6 @@ jobs:
         }
         EOF
         chmod +x azure_rest_helper.sh
-        
 
     - name: Check existing deployments
       id: check-deployments
@@ -331,7 +330,6 @@ jobs:
         echo "Frontend exists: ${FRONTEND_EXISTS:-none}"
         echo "Redis exists: ${REDIS_EXISTS:-none}"
 
-   # Solution 1: Add retry logic and better error handling for Redis deployment
     - name: Deploy Redis (if needed)
       if: |
         steps.check-deployments.outputs.redis-exists == '' &&
@@ -349,7 +347,7 @@ jobs:
         echo "🔍 Resource Group: $AZURE_RESOURCE_GROUP"
         
         # Redis container specification - FIXED syntax
-        REDIS_SPEC=$(cat << 'EOF'
+        REDIS_SPEC='
         {
           "location": "westeurope",
           "properties": {
@@ -383,13 +381,11 @@ jobs:
                   "protocol": "TCP"
                 }
               ],
-              "dnsNameLabel": "elshawi-redis-${GITHUB_RUN_NUMBER}"
+              "dnsNameLabel": "elshawi-redis-'"${GITHUB_RUN_NUMBER}"'"
             },
             "restartPolicy": "Always"
           }
-        }
-        EOF
-        )
+        }'
         
         # Try creating the container with retry logic
         MAX_ATTEMPTS=3
@@ -410,7 +406,7 @@ jobs:
               echo "❌ All attempts failed. Trying fallback image..."
               
               # Try with original Docker Hub image as fallback
-              REDIS_SPEC_FALLBACK=$(cat << 'EOF'
+              REDIS_SPEC_FALLBACK='
               {
                 "location": "westeurope",
                 "properties": {
@@ -444,13 +440,11 @@ jobs:
                         "protocol": "TCP"
                       }
                     ],
-                    "dnsNameLabel": "elshawi-redis-${GITHUB_RUN_NUMBER}"
+                    "dnsNameLabel": "elshawi-redis-'"${GITHUB_RUN_NUMBER}"'"
                   },
                   "restartPolicy": "Always"
                 }
-              }
-              EOF
-              )
+              }'
               
               echo "🔄 Trying fallback Docker Hub image..."
               if create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC_FALLBACK"; then
@@ -494,7 +488,7 @@ jobs:
         fi
         
         # Backend container specification
-        BACKEND_SPEC=$(cat << EOF
+        BACKEND_SPEC='
         {
           "location": "westeurope",
           "properties": {
@@ -502,7 +496,7 @@ jobs:
               {
                 "name": "backend",
                 "properties": {
-                  "image": "${REGISTRY}/${BACKEND_IMAGE_NAME}:${GITHUB_SHA}",
+                  "image": "'"${REGISTRY}/${BACKEND_IMAGE_NAME}:${GITHUB_SHA}"'",
                   "ports": [
                     {
                       "port": 8000,
@@ -510,12 +504,12 @@ jobs:
                     }
                   ],
                   "environmentVariables": [
-                    {"name": "DJANGO_SECRET_KEY", "value": "${DJANGO_SECRET_KEY}"},
+                    {"name": "DJANGO_SECRET_KEY", "value": "'"${DJANGO_SECRET_KEY}"'"},
                     {"name": "DJANGO_DEBUG", "value": "False"},
-                    {"name": "DJANGO_ALLOWED_HOSTS", "value": "elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io,localhost"},
-                    {"name": "REDIS_URL", "value": "elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:6379"},
+                    {"name": "DJANGO_ALLOWED_HOSTS", "value": "elshawi-backend-'"${GITHUB_RUN_NUMBER}"'.westeurope.azurecontainer.io,localhost"},
+                    {"name": "REDIS_URL", "value": "elshawi-redis-'"${GITHUB_RUN_NUMBER}"'.westeurope.azurecontainer.io:6379"},
                     {"name": "DATABASE_URL", "value": "sqlite:///db.sqlite3"},
-                    {"name": "CORS_ALLOWED_ORIGINS", "value": "https://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io"},
+                    {"name": "CORS_ALLOWED_ORIGINS", "value": "https://elshawi-frontend-'"${GITHUB_RUN_NUMBER}"'.westeurope.azurecontainer.io"},
                     {"name": "GUNICORN_WORKERS", "value": "2"},
                     {"name": "GUNICORN_TIMEOUT", "value": "30"}
                   ],
@@ -530,9 +524,9 @@ jobs:
             ],
             "imageRegistryCredentials": [
               {
-                "server": "${REGISTRY}",
-                "username": "${ACR_USERNAME}",
-                "password": "${ACR_PASSWORD}"
+                "server": "'"${REGISTRY}"'",
+                "username": "'"${ACR_USERNAME}"'",
+                "password": "'"${ACR_PASSWORD}"'"
               }
             ],
             "osType": "Linux",
@@ -544,13 +538,11 @@ jobs:
                   "protocol": "TCP"
                 }
               ],
-              "dnsNameLabel": "elshawi-backend-${GITHUB_RUN_NUMBER}"
+              "dnsNameLabel": "elshawi-backend-'"${GITHUB_RUN_NUMBER}"'"
             },
             "restartPolicy": "Always"
           }
-        }
-        EOF
-        )
+        }'
         
         create_container "elshawi-backend-${GITHUB_RUN_NUMBER}" "$BACKEND_SPEC"
 
@@ -578,7 +570,7 @@ jobs:
         fi
         
         # Frontend container specification
-        FRONTEND_SPEC=$(cat << EOF
+        FRONTEND_SPEC='
         {
           "location": "westeurope",
           "properties": {
@@ -586,7 +578,7 @@ jobs:
               {
                 "name": "frontend",
                 "properties": {
-                  "image": "${REGISTRY}/${FRONTEND_IMAGE_NAME}:${GITHUB_SHA}",
+                  "image": "'"${REGISTRY}/${FRONTEND_IMAGE_NAME}:${GITHUB_SHA}"'",
                   "ports": [
                     {
                       "port": 3000,
@@ -594,7 +586,7 @@ jobs:
                     }
                   ],
                   "environmentVariables": [
-                    {"name": "NEXT_PUBLIC_API_URL", "value": "https://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000"},
+                    {"name": "NEXT_PUBLIC_API_URL", "value": "https://elshawi-backend-'"${GITHUB_RUN_NUMBER}"'.westeurope.azurecontainer.io:8000"},
                     {"name": "NODE_ENV", "value": "production"}
                   ],
                   "resources": {
@@ -608,9 +600,9 @@ jobs:
             ],
             "imageRegistryCredentials": [
               {
-                "server": "${REGISTRY}",
-                "username": "${ACR_USERNAME}",
-                "password": "${ACR_PASSWORD}"
+                "server": "'"${REGISTRY}"'",
+                "username": "'"${ACR_USERNAME}"'",
+                "password": "'"${ACR_PASSWORD}"'"
               }
             ],
             "osType": "Linux",
@@ -622,13 +614,11 @@ jobs:
                   "protocol": "TCP"
                 }
               ],
-              "dnsNameLabel": "elshawi-frontend-${GITHUB_RUN_NUMBER}"
+              "dnsNameLabel": "elshawi-frontend-'"${GITHUB_RUN_NUMBER}"'"
             },
             "restartPolicy": "Always"
           }
-        }
-        EOF
-        )
+        }'
         
         create_container "elshawi-frontend-${GITHUB_RUN_NUMBER}" "$FRONTEND_SPEC"
 
@@ -729,7 +719,6 @@ jobs:
         }
         EOF
         chmod +x cleanup_helper.sh
-        
 
     - name: Cleanup old deployments
       env:
