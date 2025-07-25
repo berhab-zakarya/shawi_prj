@@ -384,64 +384,105 @@ jobs:
         AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
         source azure_rest_helper.sh
-        echo "🔴 PRIORITY: Deploying Redis FIRST with proven working image: $REDIS_IMAGE"
+        echo "🚀 Deploying Redis..."
         echo "🔍 Subscription ID: $AZURE_SUBSCRIPTION_ID"
         echo "🔍 Resource Group: $AZURE_RESOURCE_GROUP"
         
-        # Redis container specification with the working image
-        REDIS_SPEC='
-        {
-          "location": "westeurope",
-          "properties": {
-            "containers": [
-              {
-                "name": "redis",
-                "properties": {
-                  "image": "'"$REDIS_IMAGE"'",
-                  "command": ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"],
-                  "ports": [
-                    {
-                      "port": 6379,
-                      "protocol": "TCP"
-                    }
-                  ],
-                  "resources": {
-                    "requests": {
-                      "cpu": 0.5,
-                      "memoryInGB": 0.5
+        # Try multiple Redis images with retry logic
+        declare -a REDIS_IMAGES=(
+          "redis:7-alpine"
+          "redis:7"
+          "redis:alpine"
+          "redis:latest"
+        )
+        
+        SUCCESS=false
+        
+        for IMAGE in "${REDIS_IMAGES[@]}"; do
+          echo "🔄 Trying Redis image: $IMAGE"
+          
+          # Redis container specification
+          REDIS_SPEC='
+          {
+            "location": "westeurope",
+            "properties": {
+              "containers": [
+                {
+                  "name": "redis",
+                  "properties": {
+                    "image": "'"$IMAGE"'",
+                    "command": ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"],
+                    "ports": [
+                      {
+                        "port": 6379,
+                        "protocol": "TCP"
+                      }
+                    ],
+                    "resources": {
+                      "requests": {
+                        "cpu": 0.5,
+                        "memoryInGB": 0.5
+                      }
                     }
                   }
                 }
-              }
-            ],
-            "osType": "Linux",
-            "ipAddress": {
-              "type": "Public",
-              "ports": [
-                {
-                  "port": 6379,
-                  "protocol": "TCP"
-                }
               ],
-              "dnsNameLabel": "elshawi-redis-'"${GITHUB_RUN_NUMBER}"'"
-            },
-            "restartPolicy": "Always"
-          }
-        }'
+              "osType": "Linux",
+              "ipAddress": {
+                "type": "Public",
+                "ports": [
+                  {
+                    "port": 6379,
+                    "protocol": "TCP"
+                  }
+                ],
+                "dnsNameLabel": "elshawi-redis-'"${GITHUB_RUN_NUMBER}"'"
+              },
+              "restartPolicy": "Always"
+            }
+          }'
+          
+          # Try creating the container with this image
+          MAX_ATTEMPTS=2
+          ATTEMPT=1
+          
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "🔄 Attempt $ATTEMPT of $MAX_ATTEMPTS for image $IMAGE"
+            
+            if create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"; then
+              echo "✅ Redis container created successfully with image: $IMAGE"
+              SUCCESS=true
+              break 2  # Break out of both loops
+            else
+              echo "❌ Attempt $ATTEMPT failed for image $IMAGE"
+              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                echo "⏳ Waiting 15 seconds before retry..."
+                sleep 15
+              fi
+            fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+          
+          echo "⏳ Waiting 10 seconds before trying next image..."
+          sleep 10
+        done
         
-        # Create Redis container
-        if create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"; then
-          echo "✅ Redis container creation initiated"
-          if wait_for_container_ready "elshawi-redis-${GITHUB_RUN_NUMBER}" 180; then
-            echo "✅ Redis container is running"
-            # Additional Redis health check
-            check_redis_health "elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io" 6379 120
-          else
-            echo "⚠️ Redis container may not be fully ready, but continuing..."
-          fi
-        else
-          echo "❌ Redis deployment failed"
+        if [ "$SUCCESS" != "true" ]; then
+          echo "❌ All Redis images failed. Deployment cannot continue without Redis."
           exit 1
+        fi
+        
+        echo "⏳ Waiting for Redis to be ready..."
+        sleep 30
+        
+        # Verify Redis is running
+        if wait_for_container_ready "elshawi-redis-${GITHUB_RUN_NUMBER}" 180; then
+          echo "✅ Redis container is running"
+          # Additional Redis health check
+          check_redis_health "elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io" 6379 120
+        else
+          echo "⚠️ Redis container may not be fully ready, but continuing..."
         fi
 
     - name: Verify Redis Before Backend Deployment
