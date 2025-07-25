@@ -346,119 +346,90 @@ jobs:
         echo "🔍 Subscription ID: $AZURE_SUBSCRIPTION_ID"
         echo "🔍 Resource Group: $AZURE_RESOURCE_GROUP"
         
-        # Redis container specification - FIXED syntax
-        REDIS_SPEC='
-        {
-          "location": "westeurope",
-          "properties": {
-            "containers": [
-              {
-                "name": "redis",
-                "properties": {
-                  "image": "mcr.microsoft.com/oss/library/redis:7-alpine",
-                  "command": ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"],
-                  "ports": [
-                    {
-                      "port": 6379,
-                      "protocol": "TCP"
-                    }
-                  ],
-                  "resources": {
-                    "requests": {
-                      "cpu": 0.5,
-                      "memoryInGB": 0.5
-                    }
-                  }
-                }
-              }
-            ],
-            "osType": "Linux",
-            "ipAddress": {
-              "type": "Public",
-              "ports": [
-                {
-                  "port": 6379,
-                  "protocol": "TCP"
-                }
-              ],
-              "dnsNameLabel": "elshawi-redis-'"${GITHUB_RUN_NUMBER}"'"
-            },
-            "restartPolicy": "Always"
-          }
-        }'
+        # Try multiple Redis images with retry logic
+        declare -a REDIS_IMAGES=(
+          "redis:7-alpine"
+          "redis:7"
+          "redis:alpine"
+          "redis:latest"
+        )
         
-        # Try creating the container with retry logic
-        MAX_ATTEMPTS=3
-        ATTEMPT=1
+        SUCCESS=false
         
-        while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-          echo "🔄 Attempt $ATTEMPT of $MAX_ATTEMPTS"
+        for IMAGE in "${REDIS_IMAGES[@]}"; do
+          echo "🔄 Trying Redis image: $IMAGE"
           
-          if create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"; then
-            echo "✅ Redis container created successfully"
-            break
-          else
-            echo "❌ Attempt $ATTEMPT failed"
-            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-              echo "⏳ Waiting 30 seconds before retry..."
-              sleep 30
-            else
-              echo "❌ All attempts failed. Trying fallback image..."
-              
-              # Try with original Docker Hub image as fallback
-              REDIS_SPEC_FALLBACK='
-              {
-                "location": "westeurope",
-                "properties": {
-                  "containers": [
-                    {
-                      "name": "redis",
-                      "properties": {
-                        "image": "redis:7-alpine",
-                        "command": ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"],
-                        "ports": [
-                          {
-                            "port": 6379,
-                            "protocol": "TCP"
-                          }
-                        ],
-                        "resources": {
-                          "requests": {
-                            "cpu": 0.5,
-                            "memoryInGB": 0.5
-                          }
-                        }
-                      }
-                    }
-                  ],
-                  "osType": "Linux",
-                  "ipAddress": {
-                    "type": "Public",
+          # Redis container specification
+          REDIS_SPEC='
+          {
+            "location": "westeurope",
+            "properties": {
+              "containers": [
+                {
+                  "name": "redis",
+                  "properties": {
+                    "image": "'"$IMAGE"'",
+                    "command": ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"],
                     "ports": [
                       {
                         "port": 6379,
                         "protocol": "TCP"
                       }
                     ],
-                    "dnsNameLabel": "elshawi-redis-'"${GITHUB_RUN_NUMBER}"'"
-                  },
-                  "restartPolicy": "Always"
+                    "resources": {
+                      "requests": {
+                        "cpu": 0.5,
+                        "memoryInGB": 0.5
+                      }
+                    }
+                  }
                 }
-              }'
-              
-              echo "🔄 Trying fallback Docker Hub image..."
-              if create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC_FALLBACK"; then
-                echo "✅ Redis container created with fallback image"
-                break
-              else
-                echo "❌ Both primary and fallback attempts failed"
-                exit 1
+              ],
+              "osType": "Linux",
+              "ipAddress": {
+                "type": "Public",
+                "ports": [
+                  {
+                    "port": 6379,
+                    "protocol": "TCP"
+                  }
+                ],
+                "dnsNameLabel": "elshawi-redis-'"${GITHUB_RUN_NUMBER}"'"
+              },
+              "restartPolicy": "Always"
+            }
+          }'
+          
+          # Try creating the container with this image
+          MAX_ATTEMPTS=2
+          ATTEMPT=1
+          
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "🔄 Attempt $ATTEMPT of $MAX_ATTEMPTS for image $IMAGE"
+            
+            if create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"; then
+              echo "✅ Redis container created successfully with image: $IMAGE"
+              SUCCESS=true
+              break 2  # Break out of both loops
+            else
+              echo "❌ Attempt $ATTEMPT failed for image $IMAGE"
+              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                echo "⏳ Waiting 15 seconds before retry..."
+                sleep 15
               fi
             fi
-          fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
+          done
           
-          ATTEMPT=$((ATTEMPT + 1))
+          echo "⏳ Waiting 10 seconds before trying next image..."
+          sleep 10
         done
+        
+        if [ "$SUCCESS" != "true" ]; then
+          echo "❌ All Redis images failed. Deployment cannot continue without Redis."
+          exit 1
+        fi
         
         echo "⏳ Waiting for Redis to be ready..."
         sleep 30
