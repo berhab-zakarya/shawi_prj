@@ -85,7 +85,7 @@ export function useWebSocketChat() {
 
         console.debug(`[connectToRoom] Establishing connection to chat-${roomName}`)
         await connect(`chat-${roomName}`, {
-          url: `wss://eilflawyers.com/ws/chat/${roomName}/`,
+          url: `wss://elshawi-backend-49.westeurope.azurecontainer.io:8000/ws/chat/${roomName}/`,
           reconnectAttempts: 5,
           reconnectDelay: 1000,
           heartbeatInterval: 30000,
@@ -117,7 +117,7 @@ export function useWebSocketChat() {
       }
 
       await connect("presence", {
-        url: "wss://eilflawyers.com/ws/presence/",
+        url: "wss://elshawi-backend-49.westeurope.azurecontainer.io:8000/ws/presence/",
         reconnectAttempts: 5,
         reconnectDelay: 1000,
         heartbeatInterval: 30000,
@@ -144,7 +144,7 @@ export function useWebSocketChat() {
       }
 
       await connect("notifications", {
-        url: "wss://eilflawyers.com/ws/notifications/",
+        url: "wss://elshawi-backend-49.westeurope.azurecontainer.io:8000/ws/notifications/",
         reconnectAttempts: 5,
         reconnectDelay: 1000,
         heartbeatInterval: 30000,
