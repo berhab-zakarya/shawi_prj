@@ -49,6 +49,8 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
     "http://localhost:8001",
     "http://127.0.0.1:8001",
+        "https://elshawi-backend-66.westeurope.azurecontainer.io",
+    "https://elshawi-frontend-66.westeurope.azurecontainer.io",
 
 ]
 
@@ -63,10 +65,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://eilflawyers.com",
     "https://31.97.182.92",
     "http://31.97.182.92",
+
+        "https://elshawi-backend-66.westeurope.azurecontainer.io",
+    "https://elshawi-frontend-66.westeurope.azurecontainer.io",
 ]
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://.*\.?eilflawyers\.com$",
+    r"^https://elshawi-(backend|frontend)-66\.westeurope\.azurecontainer\.io$",
 ]
 
 # Application definition
@@ -108,6 +113,7 @@ DJANGO_CKEDITOR_5_CONFIGS = {
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 MIDDLEWARE = [
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -121,6 +127,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'elshawi_backend.urls'
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 TEMPLATES = [
     {

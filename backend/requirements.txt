@@ -11,7 +11,7 @@ PyJWT==2.9.0
 sqlparse==0.5.3
 typing_extensions==4.14.0
 tzdata==2025.2
-
+whitenoise
 # File Processing & AI
 PyPDF2==3.0.1
 python-docx==1.1.0
