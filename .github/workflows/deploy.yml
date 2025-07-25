@@ -331,7 +331,8 @@ jobs:
         echo "Frontend exists: ${FRONTEND_EXISTS:-none}"
         echo "Redis exists: ${REDIS_EXISTS:-none}"
 
-    - name: Deploy Redis (if needed)
+   # Solution 1: Add retry logic and better error handling for Redis deployment
+    - name: Deploy Redis (with retry logic)
       if: |
         steps.check-deployments.outputs.redis-exists == '' &&
         (needs.detect-changes.outputs.backend-changed == 'true' || 
@@ -343,12 +344,39 @@ jobs:
         AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
         source azure_rest_helper.sh
-        echo "🚀 Deploying Redis..."
+        echo "🚀 Deploying Redis with retry logic..."
         echo "🔍 Subscription ID: $AZURE_SUBSCRIPTION_ID"
         echo "🔍 Resource Group: $AZURE_RESOURCE_GROUP"
 
+        # Enhanced create_container function with retry logic
+        create_container_with_retry() {
+          local container_name="$1"
+          local container_spec="$2"
+          local max_attempts=3
+          local attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "🔄 Attempt $attempt of $max_attempts for $container_name"
+            
+            if create_container "$container_name" "$container_spec"; then
+              echo "✅ Container created successfully on attempt $attempt"
+              return 0
+            else
+              echo "❌ Attempt $attempt failed"
+              if [ $attempt -lt $max_attempts ]; then
+                echo "⏳ Waiting 30 seconds before retry..."
+                sleep 30
+              fi
+            fi
+            
+            attempt=$((attempt + 1))
+          done
+          
+          echo "❌ All attempts failed for $container_name"
+          return 1
+        }
         
-        # Redis container specification
+        # Redis container specification with alternative registry options
         REDIS_SPEC=$(cat << EOF
         {
           "location": "westeurope",
@@ -391,7 +419,56 @@ jobs:
         EOF
         )
         
-        create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"
+        # Try creating with retry logic
+        if ! create_container_with_retry "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"; then
+          echo "🔄 Trying alternative Redis image sources..."
+          
+          # Try with Docker Hub mirror or alternative registry
+          REDIS_SPEC_ALT=$(cat << EOF
+          {
+            "location": "westeurope",
+            "properties": {
+              "containers": [
+                {
+                  "name": "redis",
+                  "properties": {
+                    "image": "mcr.microsoft.com/oss/library/redis:7-alpine",
+                    "command": ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"],
+                    "ports": [
+                      {
+                        "port": 6379,
+                        "protocol": "TCP"
+                      }
+                    ],
+                    "resources": {
+                      "requests": {
+                        "cpu": 0.5,
+                        "memoryInGB": 0.5
+                      }
+                    }
+                  }
+                }
+              ],
+              "osType": "Linux",
+              "ipAddress": {
+                "type": "Public",
+                "ports": [
+                  {
+                    "port": 6379,
+                    "protocol": "TCP"
+                  }
+                ],
+                "dnsNameLabel": "elshawi-redis-${GITHUB_RUN_NUMBER}"
+              },
+              "restartPolicy": "Always"
+            }
+          }
+          EOF
+          )
+          
+          echo "🔄 Trying Microsoft Container Registry Redis image..."
+          create_container_with_retry "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC_ALT"
+        fi
         
         echo "⏳ Waiting for Redis to be ready..."
         sleep 30
