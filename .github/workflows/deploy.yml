@@ -207,25 +207,19 @@ jobs:
         AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
         echo "🔧 Setting up Azure REST API helper functions..."
-        
-        # Create helper functions for Azure REST API calls
         cat > azure_rest_helper.sh << 'EOF'
         #!/bin/bash
         
-        # Azure REST API helper functions
         AZURE_TOKEN="${AZURE_ACCESS_TOKEN}"
         SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID}"
         RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-${RESOURCE_GROUP:-elshawi-rg}}"
         API_BASE="https://management.azure.com"
         
-        # Function to make authenticated REST API calls
         azure_api_call() {
           local method="$1"
           local url="$2"
           local data="$3"
-          
           echo "🔍 Making API call: $method $url" >&2
-          
           if [ -n "$data" ]; then
             curl -s -w "\nHTTP_CODE:%{http_code}" -X "$method" \
               -H "Authorization: Bearer $AZURE_TOKEN" \
@@ -240,16 +234,13 @@ jobs:
           fi
         }
         
-        # Function to check if container instance exists
         check_container_exists() {
           local container_name="$1"
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2025-04-01"
-          
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
           echo "🔍 Checking if container exists: $container_name" >&2
           local response=$(azure_api_call "GET" "$url")
           local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
           local json_response=$(echo "$response" | sed '$d')
-          
           if [ "$http_code" = "200" ]; then
             echo "$json_response" | jq -r '.name // empty' 2>/dev/null
           else
@@ -257,15 +248,12 @@ jobs:
           fi
         }
         
-        # Function to delete container instance
         delete_container() {
           local container_name="$1"
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2025-04-01"
-          
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
           echo "🗑️ Deleting container: $container_name" >&2
           local response=$(azure_api_call "DELETE" "$url")
           local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
-          
           if [ "$http_code" = "200" ] || [ "$http_code" = "204" ]; then
             echo "✅ Container deletion initiated successfully" >&2
           else
@@ -274,19 +262,19 @@ jobs:
           fi
         }
         
-        # Function to create container instance
         create_container() {
           local container_name="$1"
           local container_spec="$2"
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2025-04-01"
-          
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
+          if [ -z "$SUBSCRIPTION_ID" ] || [ -z "$RESOURCE_GROUP" ] || [ -z "$AZURE_TOKEN" ]; then
+            echo "❌ Missing required environment variables: SUBSCRIPTION_ID, RESOURCE_GROUP, or AZURE_TOKEN" >&2
+            exit 1
+          fi
           echo "🚀 Creating container: $container_name" >&2
           echo "📍 URL: $url" >&2
-          
           local response=$(azure_api_call "PUT" "$url" "$container_spec")
           local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
           local json_response=$(echo "$response" | sed '$d')
-          
           if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
             echo "✅ Container creation initiated successfully" >&2
             echo "$json_response" | jq '.properties.provisioningState // "Unknown"' 2>/dev/null >&2
@@ -297,15 +285,12 @@ jobs:
           fi
         }
         
-        # Function to get container status
         get_container_status() {
           local container_name="$1"
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2025-04-01"
-          
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
           local response=$(azure_api_call "GET" "$url")
           local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
           local json_response=$(echo "$response" | sed '$d')
-          
           if [ "$http_code" = "200" ]; then
             echo "$json_response" | jq -r '.properties.instanceView.state // "Unknown"' 2>/dev/null
           else
@@ -313,7 +298,6 @@ jobs:
           fi
         }
         
-        # Debug function to verify environment variables
         debug_env() {
           echo "🔍 Environment Variables Debug:" >&2
           echo "SUBSCRIPTION_ID: ${SUBSCRIPTION_ID:-NOT_SET}" >&2
@@ -322,8 +306,8 @@ jobs:
           echo "TOKEN_LENGTH: ${#AZURE_TOKEN}" >&2
         }
         EOF
-        
         chmod +x azure_rest_helper.sh
+        
 
     - name: Check existing deployments
       id: check-deployments
@@ -643,7 +627,6 @@ jobs:
         AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
-        # Create cleanup helper functions
         cat > cleanup_helper.sh << 'EOF'
         #!/bin/bash
         
@@ -655,7 +638,6 @@ jobs:
         azure_api_call() {
           local method="$1"
           local url="$2"
-          
           curl -s -X "$method" \
             -H "Authorization: Bearer $AZURE_TOKEN" \
             -H "Content-Type: application/json" \
@@ -663,18 +645,18 @@ jobs:
         }
         
         list_containers() {
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups?api-version=2025-04-01"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups?api-version=2023-05-01"
           azure_api_call "GET" "$url" | jq -r '.value[].name' 2>/dev/null | grep "^elshawi-" || true
         }
         
         delete_container() {
           local container_name="$1"
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2025-04-01"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
           azure_api_call "DELETE" "$url"
         }
         EOF
-        
         chmod +x cleanup_helper.sh
+        
 
     - name: Cleanup old deployments
       env:
