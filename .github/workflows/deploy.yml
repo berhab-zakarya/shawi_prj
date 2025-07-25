@@ -53,7 +53,7 @@ jobs:
         HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/sub_response.json \
           -H "Authorization: Bearer ${AZURE_ACCESS_TOKEN}" \
           -H "Content-Type: application/json" \
-          "${AZURE_API_BASE}/subscriptions/${AZURE_SUBSCRIPTION_ID}?api-version=2025-04-01")
+          "${AZURE_API_BASE}/subscriptions/${AZURE_SUBSCRIPTION_ID}?api-version=2023-05-01")
         
         if [ "$HTTP_CODE" = "200" ]; then
           echo "✅ Access token is valid"
@@ -243,7 +243,7 @@ jobs:
         # Function to check if container instance exists
         check_container_exists() {
           local container_name="$1"
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2025-04-01"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
           
           echo "🔍 Checking if container exists: $container_name" >&2
           local response=$(azure_api_call "GET" "$url")
@@ -260,7 +260,7 @@ jobs:
         # Function to delete container instance
         delete_container() {
           local container_name="$1"
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2025-04-01"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
           
           echo "🗑️ Deleting container: $container_name" >&2
           local response=$(azure_api_call "DELETE" "$url")
@@ -278,7 +278,7 @@ jobs:
         create_container() {
           local container_name="$1"
           local container_spec="$2"
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2025-04-01"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
           
           echo "🚀 Creating container: $container_name" >&2
           echo "📍 URL: $url" >&2
@@ -300,7 +300,7 @@ jobs:
         # Function to get container status
         get_container_status() {
           local container_name="$1"
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2025-04-01"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
           
           local response=$(azure_api_call "GET" "$url")
           local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
@@ -663,13 +663,13 @@ jobs:
         }
         
         list_containers() {
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups?api-version=2025-04-01"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups?api-version=2023-05-01"
           azure_api_call "GET" "$url" | jq -r '.value[].name' 2>/dev/null | grep "^elshawi-" || true
         }
         
         delete_container() {
           local container_name="$1"
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2025-04-01"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
           azure_api_call "DELETE" "$url"
         }
         EOF
