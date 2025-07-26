@@ -1,48 +1,31 @@
-name: Smart Deploy Frontend & Backend
+name: Force Deploy Frontend & Backend
 
 on:
   push:
-    paths:
-      - 'frontend/**'
-      - 'backend/**'
-      - '.github/workflows/update.yml'
+    branches:
+      - main  # أو أي فرع تستخدمه للنشر
 
 jobs:
-  detect-changes:
+  deploy-frontend:
     runs-on: ubuntu-latest
-    outputs:
-      frontend_changed: ${{ steps.check.outputs.frontend }}
-      backend_changed: ${{ steps.check.outputs.backend }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Fetch recent commits
-        run: git fetch --depth=2
-
-      - id: check
-        name: Detect changed folders
-        run: |
-          FRONT=$(git diff --name-only HEAD~1 | grep '^frontend/' | wc -l)
-          BACK=$(git diff --name-only HEAD~1 | grep '^backend/' | wc -l)
-          echo "frontend=$FRONT" >> $GITHUB_OUTPUT
-          echo "backend=$BACK" >> $GITHUB_OUTPUT
-
-  deploy-frontend:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.frontend_changed != '0'
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/setup-node@v3
+      - name: Set up Node
+        uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      - run: |
+      - name: Install dependencies
+        run: |
           cd frontend
           npm ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
           npm run build
 
       - name: Restart frontend container
@@ -52,12 +35,11 @@ jobs:
             --name elshawi-frontend-stable
 
   deploy-backend:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.backend_changed != '0'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Restart backend container
         run: |
