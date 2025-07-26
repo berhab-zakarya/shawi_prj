@@ -28,7 +28,7 @@ export function WebSocketProvider({ children, userId, userRole }: WebSocketProvi
   useEffect(() => {
     if (!userId) return
 
-    const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "wss://elshawi-backend-prod.westeurope.azurecontainer.io:8000"}/ws/dashboard/?user_id=${userId}&role=${userRole}`
+    const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || "wss://elshawi-backend-stable.eastus.azurecontainer.io:8000"}/ws/dashboard/?user_id=${userId}&role=${userRole}`
     const websocket = new WebSocket(wsUrl)
 
     websocket.onopen = () => {

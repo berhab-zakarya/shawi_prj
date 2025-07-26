@@ -53,6 +53,11 @@ CSRF_TRUSTED_ORIGINS = [
     "https://elshawi-frontend-66.westeurope.azurecontainer.io",
 
 ]
+CSRF_TRUSTED_ORIGINS += [
+    "http://elshawi-frontend-stable.eastus.azurecontainer.io:3000",
+    "http://elshawi-backend-stable.eastus.azurecontainer.io:8000",
+]
+
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -69,9 +74,16 @@ CORS_ALLOWED_ORIGINS = [
         "https://elshawi-backend-66.westeurope.azurecontainer.io",
     "https://elshawi-frontend-66.westeurope.azurecontainer.io",
 ]
+CORS_ALLOWED_ORIGINS += [
+    "http://elshawi-frontend-stable.eastus.azurecontainer.io:3000",
+    "http://elshawi-backend-stable.eastus.azurecontainer.io:8000",
+]
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://elshawi-(backend|frontend)-66\.westeurope\.azurecontainer\.io$",
+]
+CORS_ALLOWED_ORIGIN_REGEXES += [
+    r"^http://elshawi-(backend|frontend)-stable\.eastus\.azurecontainer\.io(:\d+)?$",
 ]
 
 # Application definition

@@ -34,7 +34,7 @@ export async function tryRefresh(refreshToken: string): Promise<{
   }
 }> {
   try {
-    const res = await fetch(`http://elshawi-backend-prod.westeurope.azurecontainer.io:8000/api/v1/token/refresh/`, {
+    const res = await fetch(`http://elshawi-backend-stable.eastus.azurecontainer.io:8000/api/v1/token/refresh/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),

@@ -11,7 +11,7 @@ export function cn(...inputs: ClassValue[]) {
 export function getImageUrl(imagePath: string | null | undefined): string { 
   if (!imagePath) return "/placeholder.svg"
   // Assuming the imagePath is a relative path, prepend the base URL
-  const baseUrl =  "http://localhost:8000"
+  const baseUrl =  "http://elshawi-backend-stable.eastus.azurecontainer.io:8000"
   if(imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
     // If the imagePath is already a full URL, return it as is
       console.log("Image imagePath:", imagePath)

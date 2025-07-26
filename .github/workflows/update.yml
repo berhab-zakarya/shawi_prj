@@ -1,0 +1,69 @@
+name: Smart Deploy Frontend & Backend
+
+on:
+  push:
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - '.github/workflows/deploy.yml'
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend_changed: ${{ steps.check.outputs.frontend }}
+      backend_changed: ${{ steps.check.outputs.backend }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - id: check
+        name: Detect changed folders
+        run: |
+          echo "frontend=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^frontend/' | wc -l)" >> $GITHUB_OUTPUT
+          echo "backend=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^backend/' | wc -l)" >> $GITHUB_OUTPUT
+
+  deploy-frontend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend_changed != '0'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Restart frontend container
+        run: |
+          az container restart \
+            --resource-group elshawi-rg \
+            --name elshawi-frontend-stable
+
+  deploy-backend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend_changed != '0'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Restart backend container
+        run: |
+          az container restart \
+            --resource-group elshawi-rg \
+            --name elshawi-backend-stable

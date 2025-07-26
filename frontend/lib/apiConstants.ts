@@ -1,4 +1,4 @@
-export const API_BASE_URL = "http://elshawi-backend-49.westeurope.azurecontainer.io:8000/api/v1/"
+export const API_BASE_URL = "http://elshawi-backend-stable.eastus.azurecontainer.io:8000/api/v1/"
 export const REFRESH_TOKEN_ENDPOINT = `token/refresh/`;
 export const LOGIN_ENDPOINT = `auth/login/`;
 export const REGISTER_ENDPOINT = `auth/register/`;
