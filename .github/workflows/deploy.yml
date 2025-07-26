@@ -471,7 +471,7 @@ jobs:
                   ],
                   "resources": {
                     "requests": {
-                      "cpu": 0.5,
+                      "cpu": 0.25,
                       "memoryInGB": 0.5
                     }
                   }
@@ -558,8 +558,8 @@ jobs:
                   ],
                   "resources": {
                     "requests": {
-                      "cpu": 1,
-                      "memoryInGB": 2
+                      "cpu": 0.5,
+                      "memoryInGB": 1
                     }
                   }
                 }
@@ -637,8 +637,8 @@ jobs:
                   ],
                   "resources": {
                     "requests": {
-                      "cpu": 1,
-                      "memoryInGB": 1.5
+                      "cpu": 0.5,
+                      "memoryInGB": 1
                     }
                   }
                 }
