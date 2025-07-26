@@ -37,7 +37,7 @@ jobs:
       environment: ${{ steps.env.outputs.environment }}
       deploy-backend: ${{ steps.changes.outputs.backend }}
       deploy-frontend: ${{ steps.changes.outputs.frontend }}
-      deploy-redis: ${{ steps.changes.outputs.redis }}
+      deploy-redis: ${{ steps.deploy-flags.outputs.redis }}
       base-url: ${{ steps.env.outputs.base-url }}
     steps:
     - uses: actions/checkout@v4
@@ -88,6 +88,7 @@ jobs:
             - 'docker-compose*'
       
     - name: Set Deploy Flags
+      id: deploy-flags
       run: |
         FORCE="${{ github.event.inputs.force_deploy == 'true' }}"
         COMPONENT="${{ github.event.inputs.components || 'all' }}"
@@ -113,6 +114,11 @@ jobs:
         echo "DEPLOY_BACKEND=$DEPLOY_BACKEND" >> $GITHUB_ENV
         echo "DEPLOY_FRONTEND=$DEPLOY_FRONTEND" >> $GITHUB_ENV
         echo "DEPLOY_REDIS=$DEPLOY_REDIS" >> $GITHUB_ENV
+        
+        # Also set as job outputs
+        echo "backend=$DEPLOY_BACKEND" >> $GITHUB_OUTPUT
+        echo "frontend=$DEPLOY_FRONTEND" >> $GITHUB_OUTPUT
+        echo "redis=$DEPLOY_REDIS" >> $GITHUB_OUTPUT
 
   build:
     needs: setup
@@ -121,9 +127,6 @@ jobs:
       matrix:
         component: [backend, frontend]
       fail-fast: false
-    if: |
-      (matrix.component == 'backend' && needs.setup.outputs.deploy-backend == 'true') ||
-      (matrix.component == 'frontend' && needs.setup.outputs.deploy-frontend == 'true')
     steps:
     - uses: actions/checkout@v4
     - uses: docker/setup-buildx-action@v3
@@ -134,6 +137,9 @@ jobs:
         password: ${{ secrets.ACR_PASSWORD }}
 
     - name: Build & Push
+      if: |
+        (matrix.component == 'backend' && needs.setup.outputs.deploy-backend == 'true') ||
+        (matrix.component == 'frontend' && needs.setup.outputs.deploy-frontend == 'true')
       uses: docker/build-push-action@v5
       with:
         context: ./${{ matrix.component }}
