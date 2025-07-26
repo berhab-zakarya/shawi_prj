@@ -24,6 +24,11 @@ on:
         required: false
         default: false
         type: boolean
+      rebuild_images:
+        description: 'Rebuild Docker images from scratch (ignore cache)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   REGISTRY: ${{ secrets.ACR_REGISTRY }}
@@ -35,9 +40,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.env.outputs.environment }}
-      deploy-backend: ${{ steps.changes.outputs.backend }}
-      deploy-frontend: ${{ steps.changes.outputs.frontend }}
+      deploy-backend: ${{ steps.deploy-flags.outputs.backend }}
+      deploy-frontend: ${{ steps.deploy-flags.outputs.frontend }}
       deploy-redis: ${{ steps.deploy-flags.outputs.redis }}
+      rebuild-images: ${{ github.event.inputs.rebuild_images == 'true' }}
       base-url: ${{ steps.env.outputs.base-url }}
     steps:
     - uses: actions/checkout@v4
@@ -69,6 +75,7 @@ jobs:
         echo "base-url=$BASE_URL" >> $GITHUB_OUTPUT
         echo "🌍 Environment: $ENV"
         echo "🔗 Base URL: $BASE_URL"
+        echo "🔄 Rebuild Images: $REBUILD_IMAGES"
 
     - name: Detect Changes
       id: changes
@@ -140,6 +147,8 @@ jobs:
       if: |
         (matrix.component == 'backend' && needs.setup.outputs.deploy-backend == 'true') ||
         (matrix.component == 'frontend' && needs.setup.outputs.deploy-frontend == 'true')
+      env:
+        REBUILD_IMAGES: ${{ needs.setup.outputs.rebuild-images }}
       uses: docker/build-push-action@v5
       with:
         context: ./${{ matrix.component }}
@@ -148,8 +157,9 @@ jobs:
         tags: |
           ${{ env.REGISTRY }}/${{ env.PROJECT_NAME }}-${{ matrix.component }}:${{ github.sha }}
           ${{ env.REGISTRY }}/${{ env.PROJECT_NAME }}-${{ matrix.component }}:${{ needs.setup.outputs.environment }}
-        cache-from: type=gha,scope=${{ matrix.component }}
+        cache-from: ${{ env.REBUILD_IMAGES == 'true' && 'type=registry' || 'type=gha,scope=' }}${{ matrix.component }}
         cache-to: type=gha,scope=${{ matrix.component }},mode=max
+        no-cache: ${{ env.REBUILD_IMAGES == 'true' }}
 
   deploy:
     needs: [setup, build]
@@ -355,8 +365,26 @@ jobs:
       env:
         BASE_URL: ${{ needs.setup.outputs.base-url }}
         REGION: ${{ env.AZURE_REGION }}
+        DEPLOY_REDIS: ${{ needs.setup.outputs.deploy-redis }}
+        DEPLOY_BACKEND: ${{ needs.setup.outputs.deploy-backend }}
+        DEPLOY_FRONTEND: ${{ needs.setup.outputs.deploy-frontend }}
       run: |
-        source azure.sh
+        # Health check function
+        health_check() {
+          local url="$1" name="$2"
+          echo "🏥 Health checking $name..."
+          
+          for i in {1..10}; do
+            if curl -f -s --max-time 10 "$url" >/dev/null 2>&1; then
+              echo "✅ $name is healthy"
+              return 0
+            fi
+            sleep 10
+          done
+          
+          echo "⚠️ $name health check failed"
+          return 1
+        }
         
         echo "🏥 Running health checks..."
         
@@ -366,12 +394,12 @@ jobs:
         FRONTEND_URL="http://${BASE_URL}-frontend.${REGION}.azurecontainer.io:3000"
         
         # Check services
-        [ "${{ env.DEPLOY_REDIS }}" = "true" ] && {
+        [ "$DEPLOY_REDIS" = "true" ] && {
           timeout 10 bash -c "</dev/tcp/$REDIS_HOST/6379" && echo "✅ Redis OK" || echo "⚠️ Redis check failed"
         }
         
-        [ "${{ env.DEPLOY_BACKEND }}" = "true" ] && health_check "$BACKEND_URL/health/" "Backend"
-        [ "${{ env.DEPLOY_FRONTEND }}" = "true" ] && health_check "$FRONTEND_URL" "Frontend"
+        [ "$DEPLOY_BACKEND" = "true" ] && health_check "$BACKEND_URL/health/" "Backend"
+        [ "$DEPLOY_FRONTEND" = "true" ] && health_check "$FRONTEND_URL" "Frontend"
 
   cleanup:
     needs: [setup, health-check]
@@ -381,24 +409,38 @@ jobs:
     - name: Intelligent Cleanup
       env:
         BASE_URL: ${{ needs.setup.outputs.base-url }}
+        AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
-        source azure.sh
+        # Azure API helper
+        API_BASE="https://management.azure.com"
+        RG="$AZURE_RESOURCE_GROUP"
+        SUB="$AZURE_SUBSCRIPTION_ID"
+        TOKEN="$AZURE_ACCESS_TOKEN"
+        
+        api() {
+          curl -s -w "\n%{http_code}" -X "$1" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            ${3:+-d "$3"} "$2"
+        }
         
         echo "🧹 Cleaning up old deployments..."
         
         # List all containers
-        local containers_url="$API_BASE/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ContainerInstance/containerGroups?api-version=2023-05-01"
-        local all_containers=$(api GET "$containers_url" | jq -r '.value[].name' 2>/dev/null | grep "^${{ env.PROJECT_NAME }}-" || true)
+        containers_url="$API_BASE/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ContainerInstance/containerGroups?api-version=2023-05-01"
+        all_containers=$(api GET "$containers_url" | head -n -1 | jq -r '.value[].name' 2>/dev/null | grep "^${{ env.PROJECT_NAME }}-" || true)
         
         # Keep current environment + last 2 deployments per environment
-        local current_containers="$BASE_URL-redis $BASE_URL-backend $BASE_URL-frontend"
-        local keep_containers=$(echo "$all_containers" | grep -E "(prod|staging|dev)" | sort -r | head -9)
+        current_containers="$BASE_URL-redis $BASE_URL-backend $BASE_URL-frontend"
+        keep_containers=$(echo "$all_containers" | grep -E "(prod|staging|dev)" | sort -r | head -9 || true)
         
         # Delete old containers
         for container in $all_containers; do
           if ! echo "$keep_containers" | grep -q "$container"; then
             echo "🗑️ Deleting old container: $container"
-            local delete_url="$API_BASE/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ContainerInstance/containerGroups/$container?api-version=2023-05-01"
+            delete_url="$API_BASE/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ContainerInstance/containerGroups/$container?api-version=2023-05-01"
             api DELETE "$delete_url" >/dev/null &
           fi
         done
@@ -414,24 +456,28 @@ jobs:
         BASE_URL: ${{ needs.setup.outputs.base-url }}
         ENV: ${{ needs.setup.outputs.environment }}
         REGION: ${{ env.AZURE_REGION }}
+        DEPLOY_REDIS: ${{ needs.setup.outputs.deploy-redis }}
+        DEPLOY_BACKEND: ${{ needs.setup.outputs.deploy-backend }}
+        DEPLOY_FRONTEND: ${{ needs.setup.outputs.deploy-frontend }}
       run: |
         echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
         echo "| Component | Status | URL |" >> $GITHUB_STEP_SUMMARY
         echo "|-----------|--------|-----|" >> $GITHUB_STEP_SUMMARY
         echo "| Environment | $ENV | - |" >> $GITHUB_STEP_SUMMARY
+        echo "| Rebuild Mode | ${{ needs.setup.outputs.rebuild-images == 'true' && '🔄 Full Rebuild' || '⚡ Cache Used' }} | - |" >> $GITHUB_STEP_SUMMARY
         
         [ "${{ needs.deploy.result }}" = "success" ] && STATUS="✅ Success" || STATUS="❌ Failed"
         echo "| Deployment | $STATUS | - |" >> $GITHUB_STEP_SUMMARY
         
-        if [ "${{ env.DEPLOY_REDIS }}" = "true" ]; then
+        if [ "$DEPLOY_REDIS" = "true" ]; then
           echo "| Redis | ✅ Deployed | ${BASE_URL}-redis.${REGION}.azurecontainer.io:6379 |" >> $GITHUB_STEP_SUMMARY
         fi
         
-        if [ "${{ env.DEPLOY_BACKEND }}" = "true" ]; then
+        if [ "$DEPLOY_BACKEND" = "true" ]; then
           echo "| Backend | ✅ Deployed | http://${BASE_URL}-backend.${REGION}.azurecontainer.io:8000 |" >> $GITHUB_STEP_SUMMARY
         fi
         
-        if [ "${{ env.DEPLOY_FRONTEND }}" = "true" ]; then
+        if [ "$DEPLOY_FRONTEND" = "true" ]; then
           echo "| Frontend | ✅ Deployed | http://${BASE_URL}-frontend.${REGION}.azurecontainer.io:3000 |" >> $GITHUB_STEP_SUMMARY
         fi
         
