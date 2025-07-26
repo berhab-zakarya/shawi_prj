@@ -5,7 +5,7 @@ on:
     paths:
       - 'frontend/**'
       - 'backend/**'
-      - '.github/workflows/deploy.yml'
+      - '.github/workflows/update.yml'
 
 jobs:
   detect-changes:
@@ -17,11 +17,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Fetch recent commits
+        run: git fetch --depth=2
+
       - id: check
         name: Detect changed folders
         run: |
-          echo "frontend=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^frontend/' | wc -l)" >> $GITHUB_OUTPUT
-          echo "backend=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^backend/' | wc -l)" >> $GITHUB_OUTPUT
+          FRONT=$(git diff --name-only HEAD~1 | grep '^frontend/' | wc -l)
+          BACK=$(git diff --name-only HEAD~1 | grep '^backend/' | wc -l)
+          echo "frontend=$FRONT" >> $GITHUB_OUTPUT
+          echo "backend=$BACK" >> $GITHUB_OUTPUT
 
   deploy-frontend:
     needs: detect-changes
@@ -29,22 +34,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Set up Node
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      - name: Install dependencies
-        run: |
+      - run: |
           cd frontend
           npm ci
-
-      - name: Build frontend
-        run: |
-          cd frontend
           npm run build
 
       - name: Restart frontend container
@@ -59,8 +57,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
       - name: Restart backend container
         run: |
