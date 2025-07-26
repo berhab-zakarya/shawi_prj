@@ -1,48 +1,84 @@
-name: Force Deploy Frontend & Backend
+name: Force Deploy Frontend & Backend using Access Token
 
 on:
   push:
     branches:
-      - main  # أو أي فرع تستخدمه للنشر
+      - main
+
+env:
+  AZURE_REGION: eastus
+  AZURE_API_BASE: https://management.azure.com
 
 jobs:
-  deploy-frontend:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Node
+      - name: Verify Azure Access Token
+        id: verify-auth
+        env:
+          AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+        run: |
+          echo "🔐 Verifying Azure access token..."
+          echo "🔍 Subscription ID: $AZURE_SUBSCRIPTION_ID"
+          echo "🔍 Resource Group: $AZURE_RESOURCE_GROUP"
+          echo "🌍 Azure Region: $AZURE_REGION"
+          
+          HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/sub_response.json \
+            -H "Authorization: Bearer ${AZURE_ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${AZURE_API_BASE}/subscriptions/${AZURE_SUBSCRIPTION_ID}?api-version=2025-04-01")
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Access token is valid"
+            SUB_NAME=$(cat /tmp/sub_response.json | jq -r '.displayName')
+            echo "📋 Subscription: $SUB_NAME"
+            echo "verified=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Access token validation failed with HTTP code: $HTTP_CODE"
+            cat /tmp/sub_response.json
+            echo "verified=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Setup Node
         uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      - name: Install dependencies
+      - name: Install Frontend Dependencies
         run: |
           cd frontend
           npm ci
 
-      - name: Build frontend
+      - name: Build Frontend
         run: |
           cd frontend
           npm run build
 
-      - name: Restart frontend container
+      - name: Restart Frontend Container
+        env:
+          AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
         run: |
-          az container restart \
-            --resource-group elshawi-rg \
-            --name elshawi-frontend-stable
+          echo "♻️ Restarting frontend container..."
+          curl -X POST \
+            -H "Authorization: Bearer ${AZURE_ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ secrets.AZURE_RESOURCE_GROUP }}/providers/Microsoft.ContainerInstance/containerGroups/elshawi-frontend-stable/restart?api-version=2023-05-01"
 
-  deploy-backend:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Restart backend container
+      - name: Restart Backend Container
+        env:
+          AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
         run: |
-          az container restart \
-            --resource-group elshawi-rg \
-            --name elshawi-backend-stable
+          echo "♻️ Restarting backend container..."
+          curl -X POST \
+            -H "Authorization: Bearer ${AZURE_ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ secrets.AZURE_RESOURCE_GROUP }}/providers/Microsoft.ContainerInstance/containerGroups/elshawi-backend-stable/restart?api-version=2023-05-01"
