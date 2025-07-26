@@ -1,4 +1,4 @@
-name: Deploy Backend Only
+name: Rebuild and Deploy Backend Only
 
 on:
   push:
@@ -6,45 +6,78 @@ on:
       - main
     paths:
       - 'backend/**'
-      - '.github/workflows/deploy.yml'
+      - '.github/workflows/deploy-backend.yml'
       - 'docker-compose.prod.yml'
       - 'Dockerfile*'
 
+env:
+  AZURE_API_BASE: https://management.azure.com
+  AZURE_REGION: eastus
+  BACKEND_NAME: elshawi-backend-stable
+  BACKEND_DNS: elshawi-backend-stable.eastus.azurecontainer.io
+  BACKEND_PATH: ./backend
+  BACKEND_IMAGE_NAME: elshawi-backend-img:latest
+
 jobs:
   deploy-backend:
-    name: Rebuild and Deploy Backend
+    name: Deploy Backend Only
     runs-on: ubuntu-latest
 
-    env:
-      AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-      BACKEND_NAME: elshawi-backend-stable
-      BACKEND_IMAGE: elshawi-backend-img:latest
-      BACKEND_DNS: elshawi-backend-stable.eastus.azurecontainer.io
-      LOCATION: eastus
-
     steps:
-      - name: ⏬ Checkout code
+      - name: ⏬ Checkout Code
         uses: actions/checkout@v3
 
-      - name: 🔐 Azure CLI Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: 🐳 Build Backend Docker Image
+      - name: 🔐 Verify Azure Access Token
+        id: verify-auth
+        env:
+          AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
         run: |
-          docker build -f backend/Dockerfile.prod -t $BACKEND_IMAGE ./backend
+          echo "🔐 Verifying Azure access token..."
+          echo "🔍 Subscription ID: $AZURE_SUBSCRIPTION_ID"
+          echo "🔍 Resource Group: $AZURE_RESOURCE_GROUP"
+          echo "🌍 Azure Region: $AZURE_REGION"
 
-      - name: 🔑 Azure Container Registry Login
-        run: |
-          az acr login --name yourACRname
-          docker tag $BACKEND_IMAGE yourACRname.azurecr.io/$BACKEND_IMAGE
-          docker push yourACRname.azurecr.io/$BACKEND_IMAGE
+          HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/sub_response.json \
+            -H "Authorization: Bearer ${AZURE_ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${AZURE_API_BASE}/subscriptions/${AZURE_SUBSCRIPTION_ID}?api-version=2025-04-01")
 
-      - name: 🚀 Re-deploy Backend Container
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Access token is valid"
+            SUB_NAME=$(cat /tmp/sub_response.json | jq -r '.displayName')
+            echo "📋 Subscription: $SUB_NAME"
+            echo "verified=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Access token validation failed with HTTP code: $HTTP_CODE"
+            cat /tmp/sub_response.json
+            echo "verified=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: 🐳 Build Backend Image
         run: |
-          az container restart \
-            --resource-group $AZURE_RESOURCE_GROUP \
-            --name $BACKEND_NAME
+          echo "⚙️ Building backend image..."
+          docker build -t $BACKEND_IMAGE_NAME -f $BACKEND_PATH/Dockerfile.prod $BACKEND_PATH
+
+      - name: 🐳 Save Image as Tarball
+        run: |
+          docker save $BACKEND_IMAGE_NAME -o backend.tar
+
+      - name: 🔁 Restart Backend on Azure
+        run: |
+          echo "📦 Restarting Azure Container Instance: $BACKEND_NAME"
+          az login --access-token $AZURE_ACCESS_TOKEN
+          az container restart --resource-group $AZURE_RESOURCE_GROUP --name $BACKEND_NAME
+
+      - name: 🧪 Verify Backend is Up
+        run: |
+          echo "🔍 Checking backend health endpoint..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$BACKEND_DNS/api/health/)
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Backend is healthy"
+          else
+            echo "❌ Backend returned status: $HTTP_STATUS"
+            exit 1
+          fi
