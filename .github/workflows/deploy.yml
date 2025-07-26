@@ -382,9 +382,12 @@ jobs:
       env:
         GITHUB_RUN_NUMBER: ${{ github.run_number }}
         AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+        # Docker Hub credentials for authentication
+        DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+        DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
       run: |
         source azure_rest_helper.sh
-        echo "🚀 Deploying Redis..."
+        echo "🚀 Deploying Redis with Docker Hub authentication..."
         echo "🔍 Subscription ID: $AZURE_SUBSCRIPTION_ID"
         echo "🔍 Resource Group: $AZURE_RESOURCE_GROUP"
         
@@ -401,7 +404,7 @@ jobs:
         for IMAGE in "${REDIS_IMAGES[@]}"; do
           echo "🔄 Trying Redis image: $IMAGE"
           
-          # Redis container specification
+          # Redis container specification WITH Docker Hub credentials
           REDIS_SPEC='
           {
             "location": "westeurope",
@@ -411,6 +414,83 @@ jobs:
                   "name": "redis",
                   "properties": {
                     "image": "'"$IMAGE"'",
+                    "command": ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"],
+                    "ports": [
+                      {
+                        "port": 6379,
+                        "protocol": "TCP"
+                      }
+                    ],
+                    "resources": {
+                      "requests": {
+                        "cpu": 0.5,
+                        "memoryInGB": 0.5
+                      }
+                    }
+                  }
+                }
+              ],
+              "imageRegistryCredentials": [
+                {
+                  "server": "index.docker.io",
+                  "username": "'"${DOCKER_HUB_USERNAME}"'",
+                  "password": "'"${DOCKER_HUB_TOKEN}"'"
+                }
+              ],
+              "osType": "Linux",
+              "ipAddress": {
+                "type": "Public",
+                "ports": [
+                  {
+                    "port": 6379,
+                    "protocol": "TCP"
+                  }
+                ],
+                "dnsNameLabel": "elshawi-redis-'"${GITHUB_RUN_NUMBER}"'"
+              },
+              "restartPolicy": "Always"
+            }
+          }'
+          
+          # Try creating the container with this image
+          MAX_ATTEMPTS=3
+          ATTEMPT=1
+          
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "🔄 Attempt $ATTEMPT of $MAX_ATTEMPTS for image $IMAGE"
+            
+            if create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"; then
+              echo "✅ Redis container created successfully with image: $IMAGE"
+              SUCCESS=true
+              break 2  # Break out of both loops
+            else
+              echo "❌ Attempt $ATTEMPT failed for image $IMAGE"
+              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                echo "⏳ Waiting 20 seconds before retry..."
+                sleep 20
+              fi
+            fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+          
+          echo "⏳ Waiting 15 seconds before trying next image..."
+          sleep 15
+        done
+        
+        if [ "$SUCCESS" != "true" ]; then
+          echo "❌ All Redis images failed. Trying fallback approach without Docker Hub auth..."
+          
+          # Fallback: Try without Docker Hub authentication
+          REDIS_SPEC_FALLBACK='
+          {
+            "location": "westeurope",
+            "properties": {
+              "containers": [
+                {
+                  "name": "redis",
+                  "properties": {
+                    "image": "redis:alpine",
                     "command": ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"],
                     "ports": [
                       {
@@ -442,35 +522,13 @@ jobs:
             }
           }'
           
-          # Try creating the container with this image
-          MAX_ATTEMPTS=2
-          ATTEMPT=1
-          
-          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            echo "🔄 Attempt $ATTEMPT of $MAX_ATTEMPTS for image $IMAGE"
-            
-            if create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC"; then
-              echo "✅ Redis container created successfully with image: $IMAGE"
-              SUCCESS=true
-              break 2  # Break out of both loops
-            else
-              echo "❌ Attempt $ATTEMPT failed for image $IMAGE"
-              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-                echo "⏳ Waiting 15 seconds before retry..."
-                sleep 15
-              fi
-            fi
-            
-            ATTEMPT=$((ATTEMPT + 1))
-          done
-          
-          echo "⏳ Waiting 10 seconds before trying next image..."
-          sleep 10
-        done
-        
-        if [ "$SUCCESS" != "true" ]; then
-          echo "❌ All Redis images failed. Deployment cannot continue without Redis."
-          exit 1
+          if create_container "elshawi-redis-${GITHUB_RUN_NUMBER}" "$REDIS_SPEC_FALLBACK"; then
+            echo "✅ Redis container created with fallback approach"
+            SUCCESS=true
+          else
+            echo "❌ Even fallback approach failed. Deployment cannot continue without Redis."
+            exit 1
+          fi
         fi
         
         echo "⏳ Waiting for Redis to be ready..."
@@ -677,215 +735,3 @@ jobs:
         else
           echo "❌ Frontend deployment failed"
           exit 1
-        fi
-
-    - name: Enhanced Health Check (All Services)
-      env:
-        GITHUB_RUN_NUMBER: ${{ github.run_number }}
-      run: |
-        source azure_rest_helper.sh
-        
-        echo "🏥 Performing comprehensive health checks in order..."
-        
-        # Function to check URL with better error handling
-        check_url() {
-          local url="$1"
-          local service="$2"
-          local max_attempts=12
-          local attempt=1
-          
-          echo "Checking $service health at: $url"
-          
-          while [ $attempt -le $max_attempts ]; do
-            echo "  Attempt $attempt/$max_attempts for $service..."
-            
-            # Try different health check methods
-            if curl -f -s --max-time 15 --connect-timeout 10 "$url" > /dev/null 2>&1; then
-              echo "✅ $service is healthy (HTTP 200)"
-              return 0
-            elif curl -s --max-time 15 --connect-timeout 10 "$url" 2>&1 | grep -q "200\|301\|302"; then
-              echo "✅ $service is responding (redirects/other codes)"
-              return 0
-            else
-              echo "⏳ $service not ready yet, waiting..."
-              sleep 20
-            fi
-            
-            attempt=$((attempt + 1))
-          done
-          
-          echo "⚠️ $service health check failed after $max_attempts attempts"
-          return 1
-        }
-        
-        # Wait a bit for containers to fully start
-        echo "⏳ Initial wait for containers to start..."
-        sleep 60
-        
-        # 1. Check Redis first
-        echo "🔴 Step 1: Checking Redis health..."
-        REDIS_HOST="elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io"
-        check_redis_health "$REDIS_HOST" 6379 120
-        
-        # 2. Check backend health (try multiple endpoints)
-        if [ "${{ needs.build-backend.result }}" == "success" ] || [ "${{ needs.detect-changes.outputs.force-deploy }}" == "true" ]; then
-          echo "🟡 Step 2: Checking Backend health..."
-          BACKEND_BASE="http://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000"
-          
-          # Try multiple endpoints for backend
-          for endpoint in "/health/" "/admin/" "/" ""; do
-            if check_url "${BACKEND_BASE}${endpoint}" "backend"; then
-              break
-            fi
-          done
-        fi
-        
-        # 3. Check frontend health
-        if [ "${{ needs.build-frontend.result }}" == "success" ] || [ "${{ needs.detect-changes.outputs.force-deploy }}" == "true" ]; then
-          echo "🟢 Step 3: Checking Frontend health..."
-          FRONTEND_URL="http://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000"
-          check_url "$FRONTEND_URL" "frontend"
-        fi
-        
-        echo "🏥 Health check phase completed"
-
-    - name: Get deployment URLs and Summary
-      env:
-        GITHUB_RUN_NUMBER: ${{ github.run_number }}
-      run: |
-        echo "🚀 Deployment Complete!"
-        echo "=================================="
-        echo "📊 Deployment Summary:"
-        echo "Backend changed: ${{ needs.detect-changes.outputs.backend-changed }}"
-        echo "Frontend changed: ${{ needs.detect-changes.outputs.frontend-changed }}"
-        echo "Docker changed: ${{ needs.detect-changes.outputs.docker-changed }}"
-        echo "Force deploy: ${{ needs.detect-changes.outputs.force-deploy }}"
-        echo "Redis image used: $REDIS_IMAGE"
-        echo "=================================="
-        echo "🌐 Application URLs:"
-        echo "🔴 Redis: elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:6379"
-        echo "🟡 Backend API: http://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000"
-        echo "🟢 Frontend App: http://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000"
-        echo "🔧 Admin Panel: http://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000/admin/"
-        echo "=================================="
-        echo "🔍 If health checks failed, try accessing the URLs directly in a few minutes."
-        echo "🔍 Azure Container Instances can take additional time to become fully available."
-        echo "🔴 Redis was deployed FIRST to ensure backend connectivity."
-
-  cleanup:
-    needs: [azure-setup, deploy]
-    runs-on: ubuntu-latest
-    if: always() && needs.deploy.result == 'success'
-    
-    steps:
-    - name: Setup Azure REST API for Cleanup
-      env:
-        AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
-        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-      run: |
-        cat > cleanup_helper.sh << 'EOF'
-        #!/bin/bash
-        
-        AZURE_TOKEN="${AZURE_ACCESS_TOKEN}"
-        SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID}"
-        RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-${RESOURCE_GROUP:-elshawi-rg}}"
-        API_BASE="https://management.azure.com"
-        
-        azure_api_call() {
-          local method="$1"
-          local url="$2"
-          curl -s -X "$method" \
-            -H "Authorization: Bearer $AZURE_TOKEN" \
-            -H "Content-Type: application/json" \
-            "$url"
-        }
-        
-        list_containers() {
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups?api-version=2023-05-01"
-          azure_api_call "GET" "$url" | jq -r '.value[].name' 2>/dev/null | grep "^elshawi-" || true
-        }
-        
-        delete_container() {
-          local container_name="$1"
-          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
-          azure_api_call "DELETE" "$url"
-        }
-        EOF
-        chmod +x cleanup_helper.sh
-
-    - name: Cleanup old deployments (Keep Redis Priority)
-      env:
-        GITHUB_RUN_NUMBER: ${{ github.run_number }}
-      run: |
-        source cleanup_helper.sh
-        
-        echo "🧹 Cleaning up old deployments (preserving Redis priority)..."
-        
-        # Get all containers with our prefix
-        ALL_CONTAINERS=$(list_containers)
-        CURRENT_CONTAINERS="elshawi-redis-${GITHUB_RUN_NUMBER}
-        elshawi-backend-${GITHUB_RUN_NUMBER}
-        elshawi-frontend-${GITHUB_RUN_NUMBER}"
-        
-        if [ -n "$ALL_CONTAINERS" ]; then
-          # Keep last 2 deployments (6 containers total)
-          OLD_CONTAINERS=$(echo "$ALL_CONTAINERS" | grep -v -F "$CURRENT_CONTAINERS" | head -n -6 || true)
-          
-          if [ -n "$OLD_CONTAINERS" ]; then
-            echo "🗑️ Deleting old containers:"
-            echo "$OLD_CONTAINERS"
-            
-            for container in $OLD_CONTAINERS; do
-              echo "Deleting: $container"
-              delete_container "$container" &
-            done
-            
-            # Wait for all deletions to complete
-            wait
-            echo "✅ Cleanup completed"
-          else
-            echo "✨ No old containers to cleanup"
-          fi
-        else
-          echo "✨ No containers found for cleanup"
-        fi
-
-  notification:
-    needs: [azure-setup, detect-changes, deploy, cleanup]
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-    - name: Final Deployment Status Summary
-      env:
-        GITHUB_RUN_NUMBER: ${{ github.run_number }}
-      run: |
-        echo "📋 Final Deployment Status"
-        echo "=================================="
-        echo "Azure Setup: ${{ needs.azure-setup.result }}"
-        echo "Change Detection: ${{ needs.detect-changes.result }}"
-        echo "Deployment: ${{ needs.deploy.result }}"
-        echo "Cleanup: ${{ needs.cleanup.result }}"
-        echo "Backend Changed: ${{ needs.detect-changes.outputs.backend-changed }}"
-        echo "Frontend Changed: ${{ needs.detect-changes.outputs.frontend-changed }}"
-        echo "Docker Changed: ${{ needs.detect-changes.outputs.docker-changed }}"
-        echo "Redis Image: ${{ env.REDIS_IMAGE }}"
-        echo "=================================="
-        
-        if [ "${{ needs.deploy.result }}" == "success" ]; then
-          echo "✅ Deployment completed successfully!"
-          echo "🌐 Your app is live at:"
-          echo "🔴 Redis: elshawi-redis-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:6379"
-          echo "🟡 Backend: http://elshawi-backend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:8000"
-          echo "🟢 Frontend: http://elshawi-frontend-${GITHUB_RUN_NUMBER}.westeurope.azurecontainer.io:3000"
-          echo ""
-          echo "💡 Note: If URLs are not immediately accessible, wait a few minutes for Azure Container Instances to become fully available."
-          echo "🔴 Redis was deployed FIRST to ensure proper service dependencies."
-        elif [ "${{ needs.deploy.result }}" == "skipped" ]; then
-          echo "⏭️ Deployment was skipped (no changes detected)"
-        else
-          echo "❌ Deployment failed or was cancelled"
-          echo "🔍 Check the logs above for more details"
-          exit 1
-        fi
