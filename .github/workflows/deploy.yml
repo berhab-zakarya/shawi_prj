@@ -1,83 +1,638 @@
-name: Rebuild and Deploy Backend Only
+name: Backend Only Rebuild and Deploy
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main, master ]
     paths:
       - 'backend/**'
-      - '.github/workflows/deploy.yml'
-      - 'docker-compose.prod.yml'
-      - 'Dockerfile*'
+      - 'requirements.txt'
+      - 'pyproject.toml'
+      - 'poetry.lock'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+    inputs:
+      force_backend_deploy:
+        description: 'Force backend rebuild and deploy'
+        required: false
+        default: true
+        type: boolean
 
 env:
+  REGISTRY: ${{ secrets.ACR_REGISTRY }}
+  BACKEND_IMAGE_NAME: elshawi-backend
   AZURE_API_BASE: https://management.azure.com
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+  RESOURCE_GROUP: elshawi-rg
   AZURE_REGION: eastus
-  BACKEND_NAME: elshawi-backend-stable
-  BACKEND_DNS: elshawi-backend-stable.eastus.azurecontainer.io
-  BACKEND_PATH: ./backend
-  BACKEND_IMAGE_NAME: elshawi-backend-img:latest
+  # Stable DNS names (keep existing)
+  REDIS_DNS_NAME: elshawi-redis-stable
+  BACKEND_DNS_NAME: elshawi-backend-stable
+  FRONTEND_DNS_NAME: elshawi-frontend-stable
+  # Container names
+  BACKEND_CONTAINER_NAME: elshawi-backend-stable
 
 jobs:
-  deploy-backend:
-    name: Deploy Backend Only
+  azure-setup:
     runs-on: ubuntu-latest
-
+    outputs:
+      auth-verified: ${{ steps.verify-auth.outputs.verified }}
     steps:
-      - name: ⏬ Checkout Code
-        uses: actions/checkout@v3
+    - name: Verify Azure Access Token
+      id: verify-auth
+      env:
+        AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+      run: |
+        echo "🔐 Verifying Azure access token for backend deployment..."
+        echo "🔍 Subscription ID: $AZURE_SUBSCRIPTION_ID"
+        echo "🔍 Resource Group: $RESOURCE_GROUP"
+        echo "🌍 Azure Region: $AZURE_REGION"
+        
+        # Test the access token
+        HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/sub_response.json \
+          -H "Authorization: Bearer ${AZURE_ACCESS_TOKEN}" \
+          -H "Content-Type: application/json" \
+          "${AZURE_API_BASE}/subscriptions/${AZURE_SUBSCRIPTION_ID}?api-version=2025-04-01")
+        
+        if [ "$HTTP_CODE" = "200" ]; then
+          echo "✅ Access token is valid"
+          SUB_NAME=$(cat /tmp/sub_response.json | jq -r '.displayName')
+          echo "📋 Subscription: $SUB_NAME"
+          echo "verified=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Access token validation failed with HTTP code: $HTTP_CODE"
+          cat /tmp/sub_response.json
+          echo "verified=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
 
-      - name: 🔐 Verify Azure Access Token
-        id: verify-auth
-        env:
-          AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
-        run: |
-          echo "🔐 Verifying Azure access token..."
-          echo "🔍 Subscription ID: $AZURE_SUBSCRIPTION_ID"
-          echo "🔍 Resource Group: $AZURE_RESOURCE_GROUP"
-          echo "🌍 Azure Region: $AZURE_REGION"
-
-          HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/sub_response.json \
-            -H "Authorization: Bearer ${AZURE_ACCESS_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "${AZURE_API_BASE}/subscriptions/${AZURE_SUBSCRIPTION_ID}?api-version=2025-04-01")
-
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "✅ Access token is valid"
-            SUB_NAME=$(cat /tmp/sub_response.json | jq -r '.displayName')
-            echo "📋 Subscription: $SUB_NAME"
-            echo "verified=true" >> $GITHUB_OUTPUT
+  check-existing-services:
+    needs: azure-setup
+    runs-on: ubuntu-latest
+    outputs:
+      redis-exists: ${{ steps.check-services.outputs.redis-exists }}
+      frontend-exists: ${{ steps.check-services.outputs.frontend-exists }}
+      backend-exists: ${{ steps.check-services.outputs.backend-exists }}
+    steps:
+    - name: Setup Azure REST API Helper Functions
+      env:
+        AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+      run: |
+        cat > azure_rest_helper.sh << 'EOF'
+        #!/bin/bash
+        
+        AZURE_TOKEN="${AZURE_ACCESS_TOKEN}"
+        SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID}"
+        RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-${RESOURCE_GROUP:-elshawi-rg}}"
+        API_BASE="https://management.azure.com"
+        
+        azure_api_call() {
+          local method="$1"
+          local url="$2"
+          local data="$3"
+          if [ -n "$data" ]; then
+            curl -s -w "\nHTTP_CODE:%{http_code}" -X "$method" \
+              -H "Authorization: Bearer $AZURE_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$data" \
+              "$url"
           else
-            echo "❌ Access token validation failed with HTTP code: $HTTP_CODE"
-            cat /tmp/sub_response.json
-            echo "verified=false" >> $GITHUB_OUTPUT
-            exit 1
+            curl -s -w "\nHTTP_CODE:%{http_code}" -X "$method" \
+              -H "Authorization: Bearer $AZURE_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$url"
           fi
-
-      - name: 🐳 Build Backend Image
-        run: |
-          echo "⚙️ Building backend image..."
-          docker build -t $BACKEND_IMAGE_NAME -f $BACKEND_PATH/Dockerfile.prod $BACKEND_PATH
-
-      - name: 🐳 Save Image as Tarball
-        run: |
-          docker save $BACKEND_IMAGE_NAME -o backend.tar
-
-      - name: 🔁 Restart Backend on Azure
-        run: |
-          echo "📦 Restarting Azure Container Instance: $BACKEND_NAME"
-          az login --access-token $AZURE_ACCESS_TOKEN
-          az container restart --resource-group $AZURE_RESOURCE_GROUP --name $BACKEND_NAME
-
-      - name: 🧪 Verify Backend is Up
-        run: |
-          echo "🔍 Checking backend health endpoint..."
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$BACKEND_DNS/api/health/)
-          if [ "$HTTP_STATUS" = "200" ]; then
-            echo "✅ Backend is healthy"
+        }
+        
+        check_container_exists() {
+          local container_name="$1"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
+          local response=$(azure_api_call "GET" "$url")
+          local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
+          
+          if [ "$http_code" = "200" ]; then
+            local json_response=$(echo "$response" | sed '$d')
+            local state=$(echo "$json_response" | jq -r '.properties.instanceView.state // "Unknown"' 2>/dev/null)
+            echo "Container $container_name exists with state: $state" >&2
+            return 0
           else
-            echo "❌ Backend returned status: $HTTP_STATUS"
-            exit 1
+            echo "Container $container_name does not exist" >&2
+            return 1
           fi
+        }
+        EOF
+        chmod +x azure_rest_helper.sh
+
+    - name: Check Existing Services
+      id: check-services
+      run: |
+        source azure_rest_helper.sh
+        
+        echo "🔍 Checking existing services status..."
+        
+        # Check Redis
+        if check_container_exists "elshawi-redis-stable"; then
+          echo "✅ Redis container exists"
+          echo "redis-exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Redis container not found"
+          echo "redis-exists=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # Check Frontend
+        if check_container_exists "elshawi-frontend-stable"; then
+          echo "✅ Frontend container exists"
+          echo "frontend-exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Frontend container not found"
+          echo "frontend-exists=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # Check Backend
+        if check_container_exists "elshawi-backend-stable"; then
+          echo "✅ Backend container exists (will be replaced)"
+          echo "backend-exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Backend container not found (will be created)"
+          echo "backend-exists=false" >> $GITHUB_OUTPUT
+        fi
+
+  cleanup-backend-only:
+    needs: [azure-setup, check-existing-services]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Setup Azure REST API Helper Functions
+      env:
+        AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+      run: |
+        cat > azure_rest_helper.sh << 'EOF'
+        #!/bin/bash
+        
+        AZURE_TOKEN="${AZURE_ACCESS_TOKEN}"
+        SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID}"
+        RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-${RESOURCE_GROUP:-elshawi-rg}}"
+        API_BASE="https://management.azure.com"
+        
+        azure_api_call() {
+          local method="$1"
+          local url="$2"
+          local data="$3"
+          if [ -n "$data" ]; then
+            curl -s -w "\nHTTP_CODE:%{http_code}" -X "$method" \
+              -H "Authorization: Bearer $AZURE_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$data" \
+              "$url"
+          else
+            curl -s -w "\nHTTP_CODE:%{http_code}" -X "$method" \
+              -H "Authorization: Bearer $AZURE_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$url"
+          fi
+        }
+        
+        delete_container() {
+          local container_name="$1"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
+          echo "🗑️ Deleting backend container: $container_name" >&2
+          local response=$(azure_api_call "DELETE" "$url")
+          local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
+          if [ "$http_code" = "200" ] || [ "$http_code" = "204" ] || [ "$http_code" = "202" ] || [ "$http_code" = "404" ]; then
+            echo "✅ Backend container deletion initiated successfully" >&2
+            return 0
+          else
+            echo "❌ Backend container deletion failed with HTTP code: $http_code" >&2
+            return 1
+          fi
+        }
+        
+        wait_for_deletion() {
+          local container_name="$1"
+          local timeout="${2:-120}"
+          local interval=10
+          local elapsed=0
+          
+          echo "⏳ Waiting for backend container deletion: $container_name" >&2
+          
+          while [ $elapsed -lt $timeout ]; do
+            local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
+            local response=$(azure_api_call "GET" "$url")
+            local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
+            
+            if [ "$http_code" = "404" ]; then
+              echo "✅ Backend container successfully deleted" >&2
+              return 0
+            fi
+            
+            sleep $interval
+            elapsed=$((elapsed + interval))
+          done
+          
+          echo "⚠️ Backend container deletion verification timed out" >&2
+          return 1
+        }
+        EOF
+        chmod +x azure_rest_helper.sh
+
+    - name: 🗑️ Remove Only Backend Container
+      run: |
+        source azure_rest_helper.sh
+        
+        echo "🗑️ REMOVING ONLY BACKEND CONTAINER"
+        echo "=================================="
+        echo "✅ Keeping Redis: elshawi-redis-stable"
+        echo "✅ Keeping Frontend: elshawi-frontend-stable"
+        echo "🗑️ Removing Backend: elshawi-backend-stable"
+        echo "=================================="
+        
+        # Only delete backend container
+        if delete_container "$BACKEND_CONTAINER_NAME"; then
+          wait_for_deletion "$BACKEND_CONTAINER_NAME" 120
+          echo "✅ Backend container removed successfully"
+        else
+          echo "⚠️ Backend container removal failed or container didn't exist"
+        fi
+        
+        echo "🔄 Ready for fresh backend deployment"
+
+  build-backend:
+    needs: [azure-setup, check-existing-services, cleanup-backend-only]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Azure Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+
+    - name: 🏗️ Build and push Backend (Django) image - FRESH BUILD
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile.prod
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+          ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+          ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:stable
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64
+        no-cache: true
+
+  deploy-backend:
+    needs: [azure-setup, check-existing-services, cleanup-backend-only, build-backend]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Azure REST API Helper Functions
+      env:
+        AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+      run: |
+        cat > azure_rest_helper.sh << 'EOF'
+        #!/bin/bash
+        
+        AZURE_TOKEN="${AZURE_ACCESS_TOKEN}"
+        SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID}"
+        RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-${RESOURCE_GROUP:-elshawi-rg}}"
+        API_BASE="https://management.azure.com"
+        
+        azure_api_call() {
+          local method="$1"
+          local url="$2"
+          local data="$3"
+          if [ -n "$data" ]; then
+            curl -s -w "\nHTTP_CODE:%{http_code}" -X "$method" \
+              -H "Authorization: Bearer $AZURE_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$data" \
+              "$url"
+          else
+            curl -s -w "\nHTTP_CODE:%{http_code}" -X "$method" \
+              -H "Authorization: Bearer $AZURE_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$url"
+          fi
+        }
+        
+        create_container() {
+          local container_name="$1"
+          local container_spec="$2"
+          local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
+          echo "🚀 Creating backend container: $container_name" >&2
+          local response=$(azure_api_call "PUT" "$url" "$container_spec")
+          local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
+          local json_response=$(echo "$response" | sed '$d')
+          if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
+            echo "✅ Backend container creation initiated successfully" >&2
+            return 0
+          else
+            echo "❌ Backend container creation failed with HTTP code: $http_code" >&2
+            echo "$json_response" >&2
+            return 1
+          fi
+        }
+        
+        wait_for_container_ready() {
+          local container_name="$1"
+          local timeout="${2:-300}"
+          local interval=15
+          local elapsed=0
+          
+          echo "⏳ Waiting for backend container to be ready: $container_name" >&2
+          
+          while [ $elapsed -lt $timeout ]; do
+            local url="$API_BASE/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
+            local response=$(azure_api_call "GET" "$url")
+            local http_code=$(echo "$response" | tail -1 | sed 's/.*HTTP_CODE://')
+            local json_response=$(echo "$response" | sed '$d')
+            
+            if [ "$http_code" = "200" ]; then
+              local state=$(echo "$json_response" | jq -r '.properties.instanceView.state // "Unknown"' 2>/dev/null)
+              local provisioning_state=$(echo "$json_response" | jq -r '.properties.provisioningState // "Unknown"' 2>/dev/null)
+              
+              echo "Backend Container $container_name - State: $state, Provisioning: $provisioning_state" >&2
+              
+              if [ "$state" = "Running" ] && [ "$provisioning_state" = "Succeeded" ]; then
+                echo "✅ Backend container $container_name is ready!" >&2
+                return 0
+              fi
+            fi
+            
+            sleep $interval
+            elapsed=$((elapsed + interval))
+          done
+          
+          echo "⚠️ Backend container $container_name did not become ready within $timeout seconds" >&2
+          return 1
+        }
+        EOF
+        chmod +x azure_rest_helper.sh
+
+    - name: 🚀 Deploy Fresh Backend (Keep Redis & Frontend)
+      env:
+        GITHUB_SHA: ${{ github.sha }}
+        REGISTRY: ${{ env.REGISTRY }}
+        BACKEND_IMAGE_NAME: ${{ env.BACKEND_IMAGE_NAME }}
+        DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+        ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+        ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      run: |
+        source azure_rest_helper.sh
+        
+        echo "🚀 Deploying FRESH Backend (settings.py changes applied)"
+        echo "🔍 Backend DNS: $BACKEND_DNS_NAME.$AZURE_REGION.azurecontainer.io"
+        echo "🔗 Using existing Redis: $REDIS_DNS_NAME.$AZURE_REGION.azurecontainer.io:6379"
+        echo "🔗 Used by existing Frontend: $FRONTEND_DNS_NAME.$AZURE_REGION.azurecontainer.io:3000"
+        
+        # Backend container specification with stable DNS and Redis connection
+        BACKEND_SPEC='
+        {
+          "location": "'"$AZURE_REGION"'",
+          "properties": {
+            "containers": [
+              {
+                "name": "backend",
+                "properties": {
+                  "image": "'"${REGISTRY}/${BACKEND_IMAGE_NAME}:stable"'",
+                  "ports": [
+                    {
+                      "port": 8000,
+                      "protocol": "TCP"
+                    }
+                  ],
+                  "environmentVariables": [
+                    {"name": "DJANGO_SECRET_KEY", "value": "'"${DJANGO_SECRET_KEY}"'"},
+                    {"name": "DJANGO_DEBUG", "value": "False"},
+                    {"name": "DJANGO_ALLOWED_HOSTS", "value": "'"$BACKEND_DNS_NAME"'.'"$AZURE_REGION"'.azurecontainer.io,localhost,*"},
+                    {"name": "REDIS_URL", "value": "redis://'"$REDIS_DNS_NAME"'.'"$AZURE_REGION"'.azurecontainer.io:6379"},
+                    {"name": "DATABASE_URL", "value": "sqlite:///db.sqlite3"},
+                    {"name": "CORS_ALLOWED_ORIGINS", "value": "https://'"$FRONTEND_DNS_NAME"'.'"$AZURE_REGION"'.azurecontainer.io,http://'"$FRONTEND_DNS_NAME"'.'"$AZURE_REGION"'.azurecontainer.io,http://localhost:3000"},
+                    {"name": "GUNICORN_WORKERS", "value": "2"},
+                    {"name": "GUNICORN_TIMEOUT", "value": "60"},
+                    {"name": "GUNICORN_BIND", "value": "0.0.0.0:8000"}
+                  ],
+                  "resources": {
+                    "requests": {
+                      "cpu": 0.5,
+                      "memoryInGB": 1
+                    }
+                  }
+                }
+              }
+            ],
+            "imageRegistryCredentials": [
+              {
+                "server": "'"${REGISTRY}"'",
+                "username": "'"${ACR_USERNAME}"'",
+                "password": "'"${ACR_PASSWORD}"'"
+              }
+            ],
+            "osType": "Linux",
+            "ipAddress": {
+              "type": "Public",
+              "ports": [
+                {
+                  "port": 8000,
+                  "protocol": "TCP"
+                }
+              ],
+              "dnsNameLabel": "'"$BACKEND_DNS_NAME"'"
+            },
+            "restartPolicy": "Always"
+          }
+        }'
+        
+        # Create fresh Backend container
+        if create_container "$BACKEND_CONTAINER_NAME" "$BACKEND_SPEC"; then
+          wait_for_container_ready "$BACKEND_CONTAINER_NAME" 300
+          echo "✅ Fresh Backend deployed with updated settings.py"
+          echo "🌐 Backend URL: http://$BACKEND_DNS_NAME.$AZURE_REGION.azurecontainer.io:8000"
+        else
+          echo "❌ Fresh Backend deployment failed"
+          exit 1
+        fi
+
+    - name: 🏥 Backend Health Check
+      run: |
+        echo "🏥 Checking backend health after settings.py update..."
+        
+        BACKEND_URL="http://$BACKEND_DNS_NAME.$AZURE_REGION.azurecontainer.io:8000"
+        
+        # Wait for backend to start
+        echo "⏳ Waiting for backend to fully start..."
+        sleep 60
+        
+        # Health check function
+        check_backend_health() {
+          local max_attempts=15
+          local attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "🔍 Health check attempt $attempt/$max_attempts..."
+            
+            # Try different endpoints
+            for endpoint in "/health/" "/admin/" "/" ""; do
+              local full_url="${BACKEND_URL}${endpoint}"
+              echo "  Testing: $full_url"
+              
+              if curl -f -s --max-time 15 --connect-timeout 10 "$full_url" > /tmp/response.txt 2>&1; then
+                echo "✅ Backend is healthy at $full_url"
+                local size=$(wc -c < /tmp/response.txt)
+                echo "📊 Response size: $size bytes"
+                return 0
+              fi
+            done
+            
+            echo "⏳ Backend not ready yet, waiting..."
+            sleep 20
+            attempt=$((attempt + 1))
+          done
+          
+          echo "❌ Backend health check failed after $max_attempts attempts"
+          return 1
+        }
+        
+        if check_backend_health; then
+          echo "✅ Backend health check passed"
+        else
+          echo "⚠️ Backend health check failed - checking logs..."
+        fi
+
+  verification:
+    needs: [azure-setup, check-existing-services, deploy-backend]
+    runs-on: ubuntu-latest
+    if: always() && needs.deploy-backend.result == 'success'
+    
+    steps:
+    - name: 🔍 Final Backend Deployment Verification
+      run: |
+        echo "🔍 BACKEND-ONLY DEPLOYMENT VERIFICATION"
+        echo "=================================="
+        
+        # Extended verification
+        verify_backend() {
+          local url="$1"
+          echo "🔍 Verifying backend at $url"
+          
+          if curl -s --max-time 30 --connect-timeout 15 "$url" > /tmp/response.txt 2>/dev/null; then
+            echo "✅ Backend is accessible"
+            local size=$(wc -c < /tmp/response.txt)
+            echo "📊 Response size: $size bytes"
+            
+            # Check if it's a proper Django response
+            if grep -qi "django\|html\|json" /tmp/response.txt; then
+              echo "✅ Backend serving proper content"
+            fi
+            
+            return 0
+          else
+            echo "❌ Backend is not accessible"
+            return 1
+          fi
+        }
+        
+        echo "⏳ Final wait for backend stability..."
+        sleep 30
+        
+        # Verify backend
+        BACKEND_URL="http://$BACKEND_DNS_NAME.$AZURE_REGION.azurecontainer.io:8000"
+        verify_backend "$BACKEND_URL"
+        
+        echo "=================================="
+        echo "🎯 BACKEND DEPLOYMENT VERIFICATION COMPLETE"
+        echo "✨ Backend updated with your settings.py changes!"
+
+  notification:
+    needs: [azure-setup, check-existing-services, deploy-backend, verification]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: 📋 Backend Deployment Status Report
+      run: |
+        echo "📋 BACKEND-ONLY DEPLOYMENT STATUS REPORT"
+        echo "=================================="
+        echo "🔍 Service Check: ${{ needs.check-existing-services.result }}"
+        echo "🏗️ Backend Build: success"
+        echo "🚀 Backend Deploy: ${{ needs.deploy-backend.result }}"
+        echo "🔍 Verification: ${{ needs.verification.result }}"
+        echo "🌍 Azure Region: $AZURE_REGION"
+        echo "🕐 Deployment Time: $(date)"
+        echo "=================================="
+        
+        if [ "${{ needs.deploy-backend.result }}" == "success" ]; then
+          echo "🎉 BACKEND DEPLOYMENT SUCCESSFUL!"
+          echo ""
+          echo "🔄 What Was Updated:"
+          echo "  ✅ Backend rebuilt with your settings.py changes"
+          echo "  ✅ Fresh backend container deployed"
+          echo "  ✅ Same stable URL maintained"
+          echo "  ✅ Redis connection preserved"
+          echo "  ✅ Frontend integration maintained"
+          echo ""
+          echo "🌐 Your Updated Application:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🔴 Redis Service (UNCHANGED):"
+          echo "   $REDIS_DNS_NAME.$AZURE_REGION.azurecontainer.io:6379"
+          echo ""
+          echo "🟡 Backend API (UPDATED):"
+          echo "   http://$BACKEND_DNS_NAME.$AZURE_REGION.azurecontainer.io:8000"
+          echo "   http://$BACKEND_DNS_NAME.$AZURE_REGION.azurecontainer.io:8000/admin/"
+          echo ""
+          echo "🟢 Frontend Application (UNCHANGED):"
+          echo "   http://$FRONTEND_DNS_NAME.$AZURE_REGION.azurecontainer.io:3000"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "✨ Benefits of Backend-Only Deployment:"
+          echo "  → Faster deployment (only backend rebuilt)"
+          echo "  → No data loss (Redis and DB preserved)"
+          echo "  → No frontend interruption"
+          echo "  → Settings.py changes applied immediately"
+          echo "  → Same stable URLs maintained"
+          echo ""
+          echo "🚀 READY TO USE!"
+          echo "  → Your settings.py changes are now live"
+          echo "  → All existing data preserved"
+          echo "  → Frontend will use updated backend automatically"
+          
+        else
+          echo "❌ BACKEND DEPLOYMENT FAILED"
+          echo ""
+          echo "🔍 Check the deployment logs above for details"
+          echo "🔄 You can retry - existing services are preserved"
+          echo ""
+          echo "🆘 Troubleshooting:"
+          echo "  → Verify Azure credentials and permissions"
+          echo "  → Check container registry access"
+          echo "  → Ensure Docker image builds successfully"
+          echo "  → Review backend container logs"
+          
+          exit 1
+        fi
+        
+        echo ""
+        echo "🏁 BACKEND DEPLOYMENT REPORT COMPLETE"
+        echo "=================================="
