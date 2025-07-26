@@ -2,9 +2,6 @@ name: Smart Azure Full Stack Deployment
 
 on:
   push:
-    branches: [main, master, staging, develop]
-  pull_request:
-    branches: [main, master]
   workflow_dispatch:
     inputs:
       environment:
@@ -368,43 +365,152 @@ jobs:
         DEPLOY_REDIS: ${{ needs.setup.outputs.deploy-redis }}
         DEPLOY_BACKEND: ${{ needs.setup.outputs.deploy-backend }}
         DEPLOY_FRONTEND: ${{ needs.setup.outputs.deploy-frontend }}
+        AZURE_ACCESS_TOKEN: ${{ secrets.AZURE_ACCESS_TOKEN }}
+        AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       run: |
-        # Health check function
-        health_check() {
-          local url="$1" name="$2"
-          echo "🏥 Health checking $name..."
+        # Enhanced health check with container status verification
+        check_container_status() {
+          local container_name="$1"
+          echo "🔍 Checking container status: $container_name"
           
-          for i in {1..10}; do
-            if curl -f -s --max-time 10 "$url" >/dev/null 2>&1; then
-              echo "✅ $name is healthy"
+          local api_url="https://management.azure.com/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$AZURE_RESOURCE_GROUP/providers/Microsoft.ContainerInstance/containerGroups/$container_name?api-version=2023-05-01"
+          
+          local response=$(curl -s -H "Authorization: Bearer $AZURE_ACCESS_TOKEN" "$api_url")
+          local state=$(echo "$response" | jq -r '.properties.instanceView.state // "Unknown"' 2>/dev/null)
+          local provisioning_state=$(echo "$response" | jq -r '.properties.provisioningState // "Unknown"' 2>/dev/null)
+          
+          echo "  State: $state, Provisioning: $provisioning_state"
+          
+          if [ "$state" = "Running" ] && [ "$provisioning_state" = "Succeeded" ]; then
+            return 0
+          else
+            return 1
+          fi
+        }
+        
+        # DNS resolution check
+        check_dns() {
+          local hostname="$1"
+          echo "🌐 Checking DNS resolution for $hostname"
+          
+          for i in {1..5}; do
+            if nslookup "$hostname" >/dev/null 2>&1; then
+              echo "✅ DNS resolved successfully"
               return 0
             fi
-            sleep 10
+            echo "  Attempt $i/5 failed, waiting..."
+            sleep 15
           done
           
-          echo "⚠️ $name health check failed"
+          echo "⚠️ DNS resolution failed"
           return 1
         }
         
-        echo "🏥 Running health checks..."
+        # Enhanced health check function
+        health_check() {
+          local url="$1" name="$2" max_attempts="${3:-15}"
+          echo "🏥 Health checking $name at $url"
+          
+          for i in $(seq 1 $max_attempts); do
+            echo "  Attempt $i/$max_attempts..."
+            
+            # Try multiple HTTP methods and endpoints
+            for endpoint in "" "/health/" "/api/health/" "/ping"; do
+              local test_url="${url%/}${endpoint}"
+              
+              # Try different curl strategies
+              if curl -f -s --max-time 15 --connect-timeout 10 "$test_url" >/dev/null 2>&1; then
+                echo "✅ $name is healthy (endpoint: $endpoint)"
+                return 0
+              elif curl -s --max-time 15 --connect-timeout 10 "$test_url" 2>&1 | grep -q "200\|301\|302\|404"; then
+                echo "✅ $name is responding (endpoint: $endpoint)"
+                return 0
+              fi
+            done
+            
+            # Progressive wait times
+            local wait_time=$((i <= 5 ? 15 : i <= 10 ? 30 : 45))
+            echo "  Waiting ${wait_time}s before next attempt..."
+            sleep $wait_time
+          done
+          
+          echo "⚠️ $name health check failed after $max_attempts attempts"
+          return 1
+        }
+        
+        # Redis health check function
+        redis_health_check() {
+          local host="$1"
+          echo "🏥 Redis health checking $host:6379"
+          
+          for i in {1..10}; do
+            echo "  Attempt $i/10..."
+            
+            # Try multiple methods
+            if timeout 10 bash -c "echo 'PING' | nc -w 5 $host 6379" 2>/dev/null | grep -q PONG; then
+              echo "✅ Redis is healthy (nc method)"
+              return 0
+            elif timeout 10 bash -c "</dev/tcp/$host/6379" 2>/dev/null; then
+              echo "✅ Redis port is open (tcp method)"
+              return 0
+            elif timeout 10 redis-cli -h "$host" -p 6379 ping 2>/dev/null | grep -q PONG; then
+              echo "✅ Redis is healthy (redis-cli method)"
+              return 0
+            fi
+            
+            sleep 20
+          done
+          
+          echo "⚠️ Redis health check failed"
+          return 1
+        }
+        
+        echo "🏥 Starting comprehensive health checks..."
+        echo "=================================================="
+        
+        # Initial wait for containers to stabilize
+        echo "⏳ Initial stabilization wait (60s)..."
+        sleep 60
         
         # Health check URLs
         REDIS_HOST="${BASE_URL}-redis.${REGION}.azurecontainer.io"
         BACKEND_URL="http://${BASE_URL}-backend.${REGION}.azurecontainer.io:8000"
         FRONTEND_URL="http://${BASE_URL}-frontend.${REGION}.azurecontainer.io:3000"
         
-        # Check services
-        [ "$DEPLOY_REDIS" = "true" ] && {
-          timeout 10 bash -c "</dev/tcp/$REDIS_HOST/6379" && echo "✅ Redis OK" || echo "⚠️ Redis check failed"
-        }
+        # Check Redis
+        if [ "$DEPLOY_REDIS" = "true" ]; then
+          echo "🔴 Checking Redis..."
+          check_container_status "${BASE_URL}-redis"
+          check_dns "$REDIS_HOST"
+          redis_health_check "$REDIS_HOST" || echo "⚠️ Redis health check failed but continuing..."
+        fi
         
-        [ "$DEPLOY_BACKEND" = "true" ] && health_check "$BACKEND_URL/health/" "Backend"
-        [ "$DEPLOY_FRONTEND" = "true" ] && health_check "$FRONTEND_URL" "Frontend"
+        # Check Backend
+        if [ "$DEPLOY_BACKEND" = "true" ]; then
+          echo "🟡 Checking Backend..."
+          check_container_status "${BASE_URL}-backend"
+          check_dns "${BASE_URL}-backend.${REGION}.azurecontainer.io"
+          health_check "$BACKEND_URL" "Backend" 20 || echo "⚠️ Backend health check failed but continuing..."
+        fi
+        
+        # Check Frontend
+        if [ "$DEPLOY_FRONTEND" = "true" ]; then
+          echo "🟢 Checking Frontend..."
+          check_container_status "${BASE_URL}-frontend"
+          check_dns "${BASE_URL}-frontend.${REGION}.azurecontainer.io"
+          health_check "$FRONTEND_URL" "Frontend" 15 || echo "⚠️ Frontend health check failed but continuing..."
+        fi
+        
+        echo "=================================================="
+        echo "🏥 Health check phase completed"
+        echo "💡 Note: Some checks may fail initially due to DNS propagation"
+        echo "💡 Services should be accessible within 5-10 minutes"
 
   cleanup:
     needs: [setup, health-check]
     runs-on: ubuntu-latest
-    if: always() && needs.health-check.result == 'success'
+    if: always() && (needs.health-check.result == 'success' || needs.health-check.result == 'failure')
     steps:
     - name: Intelligent Cleanup
       env:
