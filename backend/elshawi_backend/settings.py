@@ -43,8 +43,8 @@ TIME_ZONE = os.getenv('TIME_ZONE', 'UTC')
 USE_TZ = os.getenv('USE_TZ', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = ["*"]
-CORS_ALLOW_ALL_ORIGINS = True
-
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
     "http://localhost:8001",
@@ -66,23 +66,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:8001",
     "ws://localhost:8001",
     "ws://127.0.0.1:8001",
-    "https://eilflawyers.com",
-    "http://eilflawyers.com",
-    "https://31.97.182.92",
-    "http://31.97.182.92",
 
-        "https://elshawi-backend-66.westeurope.azurecontainer.io",
-    "https://elshawi-frontend-66.westeurope.azurecontainer.io",
-]
-CORS_ALLOWED_ORIGINS += [
-    "http://elshawi-frontend-stable.eastus.azurecontainer.io:3000",
+  "http://elshawi-frontend-stable.eastus.azurecontainer.io:3000",
     "http://elshawi-backend-stable.eastus.azurecontainer.io:8000",
 ]
 
+
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://elshawi-(backend|frontend)-66\.westeurope\.azurecontainer\.io$",
-]
-CORS_ALLOWED_ORIGIN_REGEXES += [
     r"^http://elshawi-(backend|frontend)-stable\.eastus\.azurecontainer\.io(:\d+)?$",
 ]
 
